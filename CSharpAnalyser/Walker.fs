@@ -3,7 +3,6 @@ open System
 open System.Collections.Generic
 open System.IO
 open System.Linq
-
 open DiagnosticsTools
 
 open Microsoft.CodeAnalysis
@@ -20,6 +19,11 @@ let invocation inv =
 let splitByCondition vars condition = 
     /// todo 
     vars, vars
+
+let getProbsSum (values : List<VarValues * double>) : double = 
+    values
+    |> Seq.sumBy (fun (_,x) -> x)
+        
 
 let binaryOp left right (op : SyntaxToken) : VarValues = 
     /// todo
@@ -51,7 +55,7 @@ let rec expression (expr : ExpressionSyntax) (vars : Dictionary<_,_>) : VarValue
     | _ -> 
         failwith "todo: unsupported expression type"
 
-let blockWalker (block : ControlFlowBasicBlock) (vars : Dictionary<_,_>) =  // (semanticModel : SemanticModel) =
+let blockWalker (block : ControlFlowBasicBlock) (vars : Dictionary<string,List<VarValues * double>>) =  // (semanticModel : SemanticModel) =
     let outVars = new Dictionary<_,_>(vars)
     for statement in block.Statements do
         //printfn "%s" <| statement.ToString()
@@ -67,9 +71,9 @@ let blockWalker (block : ControlFlowBasicBlock) (vars : Dictionary<_,_>) =  // (
                 then
                     let expr = variable.Initializer.Value
                     let value = expression expr vars
-                    outVars.Add(varName, value)
+                    outVars.Add(varName, new List<_>([|value, 1.0|]))
                 else
-                    outVars.Add(varName, Noninit)
+                    outVars.Add(varName, new List<_>())
         | SyntaxKind.ExpressionStatement -> 
             let exprStmt = statement :?> ExpressionStatementSyntax//AssignmentExpressionSyntax
             let expr = exprStmt.Expression
@@ -77,9 +81,13 @@ let blockWalker (block : ControlFlowBasicBlock) (vars : Dictionary<_,_>) =  // (
             | SyntaxKind.SimpleAssignmentExpression -> 
                 let binOp = expr :?> BinaryExpressionSyntax
                 let varName = (binOp.Left :?> IdentifierNameSyntax).Identifier.Text
-                if outVars.ContainsKey(varName) then failwith "Declaration of already declared variable"
-                let value = expression binOp.Right vars
-                outVars.Add(varName, value)
+                if outVars.ContainsKey(varName)
+                then
+                    let probsSum = getProbsSum outVars.[varName]
+                    let value = expression binOp.Right vars
+                    outVars.Add(varName, new List<_>([|value, probsSum|]))
+                else
+                    failwith "assignment of undeclared variable"
             | _ -> failwith "todo unsupported type of expression"
 
         | SyntaxKind.ReturnStatement ->
@@ -102,24 +110,48 @@ let supportedKinds =
                   //SyntaxKind.NotEqualsExpression,
                   SyntaxKind.IfStatement|])
 
-let cfgWalker (cfg : ControlFlowGraph) vars = 
+
+
+let cfgWalker (cfg : ControlFlowGraph) (vars : Dictionary<string,List<VarValues * double>>) = 
     let blocksToProcess = new Queue<_>()
     blocksToProcess.Enqueue(cfg.FirstBlock,vars)
 
-    let blocksInVars = new Dictionary<_,_>()
+    let blocksInVars = new Dictionary<ControlFlowBasicBlock,List<Dictionary<string,List<_>>>>()
 
     while blocksToProcess.Count <> 0 do
         let currentBlock, vars = blocksToProcess.Dequeue()
         let outVars = blockWalker currentBlock vars
 
+        let tryAddToQ block vars = 
+            if blocksInVars.ContainsKey(block)
+            then
+                blocksInVars.[block].Add(vars)
+            else
+                let lst = new List<_>([|vars|])
+                blocksInVars.Add(block, lst)
+            if blocksInVars.[block].Count = cfg.InNodes.[block].Count
+            then
+                let lst = List.ofSeq <| blocksInVars.[block]
+                let union = new Dictionary<_,_>(lst.[0])
+                for vars in lst.[1..] do
+                    for pair in vars do
+                        let contains,value = union.TryGetValue(pair.Key)
+                        if contains
+                        then
+                            value.AddRange(pair.Value)
+                        else
+                            union.Add(pair.Key, pair.Value)
+                
+                blocksToProcess.Enqueue(block, union) 
+
         if currentBlock.Successor <> null
-        then blocksToProcess.Enqueue(currentBlock.Successor, outVars)
-        
+        then 
+            tryAddToQ currentBlock.Successor outVars
         if currentBlock.Condition <> null
         then
             let trueVars, falseVars = splitByCondition outVars currentBlock.Condition
-            blocksToProcess.Enqueue(currentBlock.TrueSuccessor, trueVars)
-            blocksToProcess.Enqueue(currentBlock.FalseSuccessor, falseVars)
+            tryAddToQ currentBlock.TrueSuccessor trueVars
+            tryAddToQ currentBlock.FalseSuccessor falseVars
 
 let methodWalker (node : MethodDeclarationSyntax) i =
     let vars = new Dictionary<string,List<VarValues*double>>()
