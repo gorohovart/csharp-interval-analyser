@@ -1,0 +1,2 @@
+C:\code\csharp-interval-analyser\CSharpAnalyser\obj\Debug\CSharpAnalyser.fsprojResolveAssemblyReference.cache
+C:\code\roslyn-examples\CSharpAnalyser\obj\Debug\CSharpAnalyser.fsprojResolveAssemblyReference.cache

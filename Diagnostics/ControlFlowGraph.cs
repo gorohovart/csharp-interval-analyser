@@ -17,9 +17,29 @@ namespace DiagnosticsTools
         {
             BasicBlocks = basicBlocks;
             FirstBlock = firstBlock;
+            InNodes = new Dictionary<ControlFlowBasicBlock, List<ControlFlowBasicBlock>>();
+            foreach (var block in basicBlocks)
+            {
+                if (InNodes.ContainsKey(block.FalseSuccessor))
+                    InNodes[block.FalseSuccessor].Add(block);
+                else
+                    InNodes.Add(block.FalseSuccessor, new List<ControlFlowBasicBlock> { block });
+
+                if (InNodes.ContainsKey(block.TrueSuccessor))
+                    InNodes[block.TrueSuccessor].Add(block);
+                else
+                    InNodes.Add(block.TrueSuccessor, new List<ControlFlowBasicBlock> { block });
+
+                if (InNodes.ContainsKey(block.Successor))
+                    InNodes[block.Successor].Add(block);
+                else
+                    InNodes.Add(block.Successor, new List<ControlFlowBasicBlock> { block });
+            }
         }
 
         public ControlFlowBasicBlock FirstBlock;
+        public Dictionary<ControlFlowBasicBlock, List<ControlFlowBasicBlock>> InNodes;
+
         public IList<ControlFlowBasicBlock> BasicBlocks { get; private set; }
 
         private String GetCause(ControlFlowBasicBlock predecessor)
@@ -77,8 +97,9 @@ namespace DiagnosticsTools
 
         private static String Statement(SyntaxNode statement)
         {
-            const int max = 500;
-            
+            const int max = 500 - 100 + 200 - 100;
+            int x;
+            x = 5 + 4;
             var ifStatement = statement as IfStatementSyntax;
             String text = (ifStatement != null ? ifStatement.Condition : statement).ToString().Replace("\"", "\\\"").Replace("  ", " ");
             String result = text.Length > max ? text.Substring(0, max - 3) + "..." : text;

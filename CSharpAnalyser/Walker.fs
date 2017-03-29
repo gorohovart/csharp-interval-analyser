@@ -18,88 +18,117 @@ let invocation inv =
     ()
 
 let splitByCondition vars condition = 
-    ()
+    /// todo 
+    vars, vars
 
-let expression (expr : ExpressionStatementSyntax) = 
-    let children = expr.ChildNodes()
-    if children.Count() > 1 then failwith "expression have more then one child"
-    let child = children.ToArray().[0]
-    match child.CSharpKind() with 
-    | SyntaxKind.InvocationExpression -> 
-        let inv = child :?> InvocationExpressionSyntax
-        invocation inv
-        ()
-    | SyntaxKind.SimpleAssignmentExpression -> 
-        ()
+let binaryOp left right (op : SyntaxToken) : VarValues = 
+    /// todo
+    match op.Text with
+    | "+" -> 
+        left
+    | "-" -> 
+        left
+    | "/" -> 
+        left
+    | "*" -> 
+        left
+    | _ -> failwith "todo: unsupported binary operation"
 
-let blockWalker (block : ControlFlowBasicBlock) vars =  // (semanticModel : SemanticModel) =
-    let outVars = new Dictionary<_,_>()
+let rec expression (expr : ExpressionSyntax) (vars : Dictionary<_,_>) : VarValues= 
+//    let children = expr.ChildNodes()
+//    if children.Count() > 1 then failwith "expression have more then one child"
+//    let child = children.ToArray().[0]
+    let outVars = ref null//<| new Dictionary<_,_>(vars)
+    match expr with 
+    | :? BinaryExpressionSyntax as binExpr -> 
+        let left = expression binExpr.Left vars
+        let right = expression binExpr.Right vars
+        let operation = binExpr.OperatorToken
+        
+        binaryOp left right operation
+    | :? InvocationExpressionSyntax as inv -> 
+        Interval(MinValue, MaxValue)
+    | _ -> 
+        failwith "todo: unsupported expression type"
+
+let blockWalker (block : ControlFlowBasicBlock) (vars : Dictionary<_,_>) =  // (semanticModel : SemanticModel) =
+    let outVars = new Dictionary<_,_>(vars)
     for statement in block.Statements do
         //printfn "%s" <| statement.ToString()
         
         match statement.CSharpKind() with
         | SyntaxKind.VariableDeclaration -> 
-            let variableDecl = statement :> SyntaxNode :?> LocalDeclarationStatementSyntax
-            //let //VariableDeclarationSyntax
-            //let x = semanticModel.GetSymbolInfo(variableDecl)//.GetSymbolInfo(variableDecl.Declaration.Type).Symbol
-            //variableDecl.Variables
-//            printfn "%A" <| x//variableDecl.GetType()
-//            for variable in variableDecl.Variables do
-//                printfn "variable: %A" <| variable
-            ()
+            let variableDecl = (statement :?> LocalDeclarationStatementSyntax).Declaration
+            let variables = variableDecl.Variables
+            for variable in variables do
+                let varName = variable.Identifier.Text
+                if outVars.ContainsKey(varName) then failwith "Declaration of already declared variable"
+                if variable.Initializer <> null
+                then
+                    let expr = variable.Initializer.Value
+                    let value = expression expr vars
+                    outVars.Add(varName, value)
+                else
+                    outVars.Add(varName, Noninit)
         | SyntaxKind.ExpressionStatement -> 
-            let expr = statement :?> ExpressionStatementSyntax//AssignmentExpressionSyntax
-            expression expr
-            ()
-        | SyntaxKind.IfStatement ->
-            let ifNode = statement :?> IfStatementSyntax
-            ifNode.Condition
-            ifNode.Statement
-            ifNode.Else
-            ()
+            let exprStmt = statement :?> ExpressionStatementSyntax//AssignmentExpressionSyntax
+            let expr = exprStmt.Expression
+            match expr.CSharpKind() with 
+            | SyntaxKind.SimpleAssignmentExpression -> 
+                let binOp = expr :?> BinaryExpressionSyntax
+                let varName = (binOp.Left :?> IdentifierNameSyntax).Identifier.Text
+                if outVars.ContainsKey(varName) then failwith "Declaration of already declared variable"
+                let value = expression binOp.Right vars
+                outVars.Add(varName, value)
+            | _ -> failwith "todo unsupported type of expression"
+
         | SyntaxKind.ReturnStatement ->
-            ()
-        | SyntaxKind.EqualsExpression -> 
-            ()
-        | SyntaxKind.NotEqualsExpression -> 
             ()
         | _ -> //unsupported statement
             ()
-
+    // undeclare vars defined in block
+    let v = new Dictionary<_,_>()
+    for pair in outVars do
+        if vars.ContainsKey(pair.Key)
+        then
+            v.Add(pair.Key,  pair.Value)
+    v
 
 let supportedKinds =
-    new Set<_>([|
-        SyntaxKind.VariableDeclaration;
-        SyntaxKind.ExpressionStatement;
-        SyntaxKind.ReturnStatement;
-        //SyntaxKind.EqualsExpression,
-        //SyntaxKind.NotEqualsExpression,
-        SyntaxKind.IfStatement|])
+    new Set<_>([| SyntaxKind.VariableDeclaration;
+                  SyntaxKind.ExpressionStatement;
+                  SyntaxKind.ReturnStatement;
+                  //SyntaxKind.EqualsExpression,
+                  //SyntaxKind.NotEqualsExpression,
+                  SyntaxKind.IfStatement|])
 
 let cfgWalker (cfg : ControlFlowGraph) vars = 
-    let blocks = new Queue<_>()
-    blocks.Enqueue(cfg.FirstBlock,vars)
-    while blocks.Count <> 0 do
-        let currentBlock, vars = blocks.Dequeue()
+    let blocksToProcess = new Queue<_>()
+    blocksToProcess.Enqueue(cfg.FirstBlock,vars)
+
+    let blocksInVars = new Dictionary<_,_>()
+
+    while blocksToProcess.Count <> 0 do
+        let currentBlock, vars = blocksToProcess.Dequeue()
         let outVars = blockWalker currentBlock vars
 
         if currentBlock.Successor <> null
-        then blocks.Enqueue(currentBlock.Successor, outVars)
+        then blocksToProcess.Enqueue(currentBlock.Successor, outVars)
         
         if currentBlock.Condition <> null
         then
             let trueVars, falseVars = splitByCondition outVars currentBlock.Condition
-            blocks.Enqueue(currentBlock.TrueSuccessor, trueVars)
-            blocks.Enqueue(currentBlock.FalseSuccessor, falseVars)
+            blocksToProcess.Enqueue(currentBlock.TrueSuccessor, trueVars)
+            blocksToProcess.Enqueue(currentBlock.FalseSuccessor, falseVars)
 
 let methodWalker (node : MethodDeclarationSyntax) i =
-    let vars = new Dictionary<_,_>()
+    let vars = new Dictionary<string,List<VarValues*double>>()
     for parameter in node.ParameterList.Parameters do
         let paramType = parameter.Type
         let paramName = parameter.Identifier
         if paramType.ToString() = "int"
         then
-            vars.Add(paramName.Text, Interval(MinValue, MaxValue))
+            vars.Add(paramName.Text, new List<_>([|Interval(MinValue, MaxValue), 1.0|]))
     
     //let cfg = blockWalker node.Body vars     
     let cfg = ControlFlowGraph.Create(node.Body :> SyntaxNode)
