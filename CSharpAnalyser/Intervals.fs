@@ -9,8 +9,8 @@ type IntValue =
 type Interval = 
     val Low : int
     val High : int
-    val Prob : double
-    new(low, high, prob) = 
+    //val Prob : double
+    new(low, high(*, prob*)) = 
         { Low = low
           High = high
-          Prob = prob }
+          (*Prob = prob*) }

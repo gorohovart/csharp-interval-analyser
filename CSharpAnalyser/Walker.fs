@@ -17,13 +17,13 @@ let maxValue = Int32.MaxValue
 let invocation inv = 
     ()
 
-let getProbsSum (values : seq<Interval>) : double = 
-    values
-    |> Seq.sumBy (fun x -> x.Prob)
+//let getProbsSum (values : seq<Interval>) : double = 
+//    values
+//    |> Seq.sumBy (fun x -> x.Prob)
         
 
 let binaryOp (left : Interval list) (right : Interval list) (op : SyntaxToken) (vars : Dictionary<_,_>) : Interval list = 
-    let Prob = getProbsSum left * getProbsSum right
+//    let Prob = getProbsSum left * getProbsSum right
     
     let maker operation (left : Interval) (right : Interval) = 
         let G = [operation left.Low right.Low;
@@ -31,12 +31,12 @@ let binaryOp (left : Interval list) (right : Interval list) (op : SyntaxToken) (
                  operation left.High right.Low;
                  operation left.High right.High]
         
-        let prob = (left.Prob * right.Prob) / Prob
+//        let prob = (left.Prob * right.Prob) / Prob
 
         let minG = G |> List.min
         let maxG = G |> List.max
 
-        Interval(max minG minValue, min maxG maxValue, prob)
+        Interval(max minG minValue, min maxG maxValue(*, prob*))
 
     [ for leftInterval in left do
           for rightInterval in right do
@@ -60,10 +60,10 @@ let rec expression (expr : ExpressionSyntax) (vars : Dictionary<string,Interval 
         
         binaryOp left right operation vars
     | :? InvocationExpressionSyntax as inv -> 
-        [Interval(minValue, maxValue, 1.0)]
+        [Interval(minValue, maxValue(*, 1.0*))]
     | :? LiteralExpressionSyntax as literal -> 
         let value = Int32.Parse literal.Token.Text
-        [Interval(value, value, 1.0)]
+        [Interval(value, value(*, 1.0*))]
     | :? IdentifierNameSyntax as ident -> 
         let identName = ident.Identifier.Text
         vars.[identName] |> List.ofSeq
@@ -90,7 +90,7 @@ let blockWalker (block : ControlFlowBasicBlock) (vars : Dictionary<string,Interv
                     let value = expression expr vars
                     outVars.Add(varName, value)
                 else
-                    outVars.Add(varName, [Interval(0,0,1.0)])
+                    outVars.Add(varName, [Interval(0,0(*,1.0*))])
         | SyntaxKind.ExpressionStatement -> 
             let exprStmt = statement :?> ExpressionStatementSyntax
             let expr = exprStmt.Expression 
@@ -100,10 +100,10 @@ let blockWalker (block : ControlFlowBasicBlock) (vars : Dictionary<string,Interv
                 let varName = (binOp.Left :?> IdentifierNameSyntax).Identifier.Text
                 if outVars.ContainsKey(varName)
                 then
-                    let probsSum = getProbsSum outVars.[varName]
+//                    let probsSum = getProbsSum outVars.[varName]
                     let value = expression binOp.Right vars
-                    let x = value |> List.map (fun x -> Interval(x.Low, x.High, x.Prob * probsSum))
-                    outVars.Add(varName, x)
+//                    let x = value |> List.map (fun x -> Interval(x.Low, x.High, x.Prob * probsSum))
+                    outVars.Add(varName, (*x*)value)
                 else
                     failwith "assignment of undeclared variable"
             | _ -> failwith "todo unsupported type of expression"
@@ -131,12 +131,15 @@ let supportedKinds =
 let splitByCondition (vars : Dictionary<string,Interval list>) (cond : ExpressionSyntax) =
     match cond with
     | :? BinaryExpressionSyntax as conditionExpression ->
-        conditionExpression.Left
-        conditionExpression.Right
-    | _ -> failwith "unsupported type on condition"    
-    if conditionExpression.IsKind(SyntaxKind.EqualsExpression)
-    then
-        
+        let leftExpr = conditionExpression.Left
+        let rightExpr = conditionExpression.Right
+        match conditionExpression.CSharpKind() with
+        | SyntaxKind.LessThanExpression -> 
+        | SyntaxKind.LessThanOrEqualExpression -> 
+        | SyntaxKind.GreaterThanExpression -> 
+        | SyntaxKind.GreaterThanOrEqualExpression -> 
+        | _ -> failwith "unsupported type on binary condition"
+    | _ -> failwith "unsupported type on condition"
     vars, vars
 
 let cfgWalker (cfg : ControlFlowGraph) (vars : Dictionary<string,Interval list>) = 
@@ -166,7 +169,11 @@ let cfgWalker (cfg : ControlFlowGraph) (vars : Dictionary<string,Interval list>)
                         if contains
                         then
                             union.Remove(pair.Key) |> ignore
-                            union.Add(pair.Key, value @ pair.Value)
+                            let res = 
+                                (value @ pair.Value)
+                                |> List.groupBy(fun x -> x.High, x.Low)
+                                |> List.map(fun ((low, high),lst) ->Interval(low, high(*, getProbsSum lst*)))
+                            union.Add(pair.Key, res)
                         else
                             union.Add(pair.Key, pair.Value)
                 
@@ -190,7 +197,7 @@ let methodWalker (node : MethodDeclarationSyntax) i =
         let paramName = parameter.Identifier
         if paramType.ToString() = "int"
         then
-            vars.Add(paramName.Text, new List<_>([Interval(minValue, maxValue, 1.0)[))
+            vars.Add(paramName.Text, [Interval(minValue, maxValue(*, 1.0*))])
     
     //let cfg = blockWalker node.Body vars     
     let cfg = ControlFlowGraph.Create(node.Body :> SyntaxNode)
@@ -217,7 +224,7 @@ type CodeBlockWalker(vars : Dictionary<string, Interval>) =
             let paramName = parameter.Identifier
             if paramType.ToString() = "int"
             then
-                vars.Add(paramName.Text, Interval(minValue, maxValue, 1.0))
+                vars.Add(paramName.Text, Interval(minValue, maxValue(*, 1.0*)))
         ()
 
     override this.VisitVariableDeclaration(node : VariableDeclarationSyntax ) = 
@@ -233,7 +240,7 @@ type MethodWalker(vars : Dictionary<string, Interval>) =
             let paramName = parameter.Identifier
             if paramType.ToString() = "int"
             then
-                vars.Add(paramName.Text, Interval(minValue, maxValue, 1.0))
+                vars.Add(paramName.Text, Interval(minValue, maxValue(*, 1.0*)))
         ()
 
     override this.VisitVariableDeclaration(node : VariableDeclarationSyntax ) = 
