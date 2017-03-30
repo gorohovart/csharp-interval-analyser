@@ -11,34 +11,43 @@ open Microsoft.CodeAnalysis.CSharp.Syntax
 open Microsoft.CodeAnalysis.MSBuild
 open Intervals
 
+let minValue = Int32.MinValue
+let maxValue = Int32.MaxValue
+
 let invocation inv = 
     ()
 
-let splitByCondition vars condition = 
-    /// todo 
-    vars, vars
-
-let getProbsSum (values : List<VarValues * double>) : double = 
+let getProbsSum (values : seq<Interval>) : double = 
     values
-    |> Seq.sumBy (fun (_,x) -> x)
+    |> Seq.sumBy (fun x -> x.Prob)
         
 
-let binaryOp left right (op : SyntaxToken) : VarValues = 
-    /// todo
-    let minG = 1
-    let maxG = 1
-    let maker operation = 
-        (max(minG, Int32.MinValue),
-            min(maxG, Int32.MaxValue))
-        left
-    match op.Text with
-    | "+" -> maker (+)
-    | "-" -> maker (-)
-    | "/" -> maker (/)
-    | "*" -> maker (*)
-    | _ -> failwith "todo: unsupported binary operation"
+let binaryOp (left : Interval list) (right : Interval list) (op : SyntaxToken) (vars : Dictionary<_,_>) : Interval list = 
+    let Prob = getProbsSum left * getProbsSum right
+    
+    let maker operation (left : Interval) (right : Interval) = 
+        let G = [operation left.Low right.Low;
+                 operation left.Low right.High;
+                 operation left.High right.Low;
+                 operation left.High right.High]
+        
+        let prob = (left.Prob * right.Prob) / Prob
 
-let rec expression (expr : ExpressionSyntax) (vars : Dictionary<_,_>) : VarValues= 
+        let minG = G |> List.min
+        let maxG = G |> List.max
+
+        Interval(max minG minValue, min maxG maxValue, prob)
+
+    [ for leftInterval in left do
+          for rightInterval in right do
+              match op.Text with
+              | "+" -> yield maker (+) leftInterval rightInterval
+              | "-" -> yield maker (-) leftInterval rightInterval
+              | "/" -> failwith "todo: unsupported \"/\" operation" //yield maker (/) leftInterval rightInterval
+              | "*" -> yield maker (*) leftInterval rightInterval
+              | _ -> failwith "todo: unsupported binary operation" ]
+
+let rec expression (expr : ExpressionSyntax) (vars : Dictionary<string,Interval list>) : Interval list = 
 //    let children = expr.ChildNodes()
 //    if children.Count() > 1 then failwith "expression have more then one child"
 //    let child = children.ToArray().[0]
@@ -49,13 +58,21 @@ let rec expression (expr : ExpressionSyntax) (vars : Dictionary<_,_>) : VarValue
         let right = expression binExpr.Right vars
         let operation = binExpr.OperatorToken
         
-        binaryOp left right operation
+        binaryOp left right operation vars
     | :? InvocationExpressionSyntax as inv -> 
-        Interval(MinValue, MaxValue)
-    | _ -> 
-        failwith "todo: unsupported expression type"
+        [Interval(minValue, maxValue, 1.0)]
+    | :? LiteralExpressionSyntax as literal -> 
+        let value = Int32.Parse literal.Token.Text
+        [Interval(value, value, 1.0)]
+    | :? IdentifierNameSyntax as ident -> 
+        let identName = ident.Identifier.Text
+        vars.[identName] |> List.ofSeq
+    | _ -> failwith "todo: unsupported expression type"
 
-let blockWalker (block : ControlFlowBasicBlock) (vars : Dictionary<string,List<VarValues * double>>) =  // (semanticModel : SemanticModel) =
+let condition (cond : ExpressionSyntax) (vars : Dictionary<string,Interval list>) =
+    ()
+
+let blockWalker (block : ControlFlowBasicBlock) (vars : Dictionary<string,Interval list>) =  // (semanticModel : SemanticModel) =
     let outVars = new Dictionary<_,_>(vars)
     for statement in block.Statements do
         //printfn "%s" <| statement.ToString()
@@ -71,12 +88,12 @@ let blockWalker (block : ControlFlowBasicBlock) (vars : Dictionary<string,List<V
                 then
                     let expr = variable.Initializer.Value
                     let value = expression expr vars
-                    outVars.Add(varName, new List<_>([|value, 1.0|]))
+                    outVars.Add(varName, value)
                 else
-                    outVars.Add(varName, new List<_>([|Interval(Value 0,Value 0), 1.0|]))
+                    outVars.Add(varName, [Interval(0,0,1.0)])
         | SyntaxKind.ExpressionStatement -> 
-            let exprStmt = statement :?> ExpressionStatementSyntax//AssignmentExpressionSyntax
-            let expr = exprStmt.Expression
+            let exprStmt = statement :?> ExpressionStatementSyntax
+            let expr = exprStmt.Expression 
             match expr.CSharpKind() with 
             | SyntaxKind.SimpleAssignmentExpression -> 
                 let binOp = expr :?> BinaryExpressionSyntax
@@ -85,7 +102,8 @@ let blockWalker (block : ControlFlowBasicBlock) (vars : Dictionary<string,List<V
                 then
                     let probsSum = getProbsSum outVars.[varName]
                     let value = expression binOp.Right vars
-                    outVars.Add(varName, new List<_>([|value, probsSum|]))
+                    let x = value |> List.map (fun x -> Interval(x.Low, x.High, x.Prob * probsSum))
+                    outVars.Add(varName, x)
                 else
                     failwith "assignment of undeclared variable"
             | _ -> failwith "todo unsupported type of expression"
@@ -110,13 +128,22 @@ let supportedKinds =
                   //SyntaxKind.NotEqualsExpression,
                   SyntaxKind.IfStatement|])
 
+let splitByCondition (vars : Dictionary<string,Interval list>) (cond : ExpressionSyntax) =
+    match cond with
+    | :? BinaryExpressionSyntax as conditionExpression ->
+        conditionExpression.Left
+        conditionExpression.Right
+    | _ -> failwith "unsupported type on condition"    
+    if conditionExpression.IsKind(SyntaxKind.EqualsExpression)
+    then
+        
+    vars, vars
 
-
-let cfgWalker (cfg : ControlFlowGraph) (vars : Dictionary<string,List<VarValues * double>>) = 
+let cfgWalker (cfg : ControlFlowGraph) (vars : Dictionary<string,Interval list>) = 
     let blocksToProcess = new Queue<_>()
     blocksToProcess.Enqueue(cfg.FirstBlock,vars)
 
-    let blocksInVars = new Dictionary<ControlFlowBasicBlock,List<Dictionary<string,List<_>>>>()
+    let blocksInVars = new Dictionary<ControlFlowBasicBlock,List<Dictionary<string, Interval list>>>()
 
     while blocksToProcess.Count <> 0 do
         let currentBlock, vars = blocksToProcess.Dequeue()
@@ -138,7 +165,8 @@ let cfgWalker (cfg : ControlFlowGraph) (vars : Dictionary<string,List<VarValues 
                         let contains,value = union.TryGetValue(pair.Key)
                         if contains
                         then
-                            value.AddRange(pair.Value)
+                            union.Remove(pair.Key) |> ignore
+                            union.Add(pair.Key, value @ pair.Value)
                         else
                             union.Add(pair.Key, pair.Value)
                 
@@ -147,20 +175,22 @@ let cfgWalker (cfg : ControlFlowGraph) (vars : Dictionary<string,List<VarValues 
         if currentBlock.Successor <> null
         then 
             tryAddToQ currentBlock.Successor outVars
-        if currentBlock.Condition <> null
+
+        let cond = currentBlock.Condition
+        if cond <> null
         then
-            let trueVars, falseVars = splitByCondition outVars currentBlock.Condition
+            let trueVars, falseVars = splitByCondition outVars cond
             tryAddToQ currentBlock.TrueSuccessor trueVars
             tryAddToQ currentBlock.FalseSuccessor falseVars
 
 let methodWalker (node : MethodDeclarationSyntax) i =
-    let vars = new Dictionary<string,List<VarValues*double>>()
+    let vars = new Dictionary<string,Interval list>()
     for parameter in node.ParameterList.Parameters do
         let paramType = parameter.Type
         let paramName = parameter.Identifier
         if paramType.ToString() = "int"
         then
-            vars.Add(paramName.Text, new List<_>([|Interval(MinValue, MaxValue), 1.0|]))
+            vars.Add(paramName.Text, new List<_>([Interval(minValue, maxValue, 1.0)[))
     
     //let cfg = blockWalker node.Body vars     
     let cfg = ControlFlowGraph.Create(node.Body :> SyntaxNode)
@@ -177,7 +207,7 @@ let methodWalker (node : MethodDeclarationSyntax) i =
 
 
 
-type CodeBlockWalker(vars : Dictionary<string, VarValues>) =
+type CodeBlockWalker(vars : Dictionary<string, Interval>) =
     inherit CSharpSyntaxWalker()
     
     override this.VisitMethodDeclaration(node : MethodDeclarationSyntax ) = 
@@ -187,13 +217,13 @@ type CodeBlockWalker(vars : Dictionary<string, VarValues>) =
             let paramName = parameter.Identifier
             if paramType.ToString() = "int"
             then
-                vars.Add(paramName.Text, Interval(MinValue, MaxValue))
+                vars.Add(paramName.Text, Interval(minValue, maxValue, 1.0))
         ()
 
     override this.VisitVariableDeclaration(node : VariableDeclarationSyntax ) = 
         ()
 
-type MethodWalker(vars : Dictionary<string, VarValues>) =
+type MethodWalker(vars : Dictionary<string, Interval>) =
     inherit CSharpSyntaxWalker()
     
     override this.VisitMethodDeclaration(node : MethodDeclarationSyntax ) = 
@@ -203,7 +233,7 @@ type MethodWalker(vars : Dictionary<string, VarValues>) =
             let paramName = parameter.Identifier
             if paramType.ToString() = "int"
             then
-                vars.Add(paramName.Text, Interval(MinValue, MaxValue))
+                vars.Add(paramName.Text, Interval(minValue, maxValue, 1.0))
         ()
 
     override this.VisitVariableDeclaration(node : VariableDeclarationSyntax ) = 

@@ -1,12 +1,26 @@
+FRAMEWORK: >= NET45
 NUGET
   remote: https://api.nuget.org/v3/index.json
-    Microsoft.Bcl.Immutable (1.1.20-beta) - framework: >= net45
-    Microsoft.Bcl.Metadata (1.0.9-alpha) - framework: >= net45
-    Microsoft.CodeAnalysis (0.6.4033103-beta) - framework: >= net45
-    Microsoft.CodeAnalysis.CodeActions (0.6.4033103-beta) - framework: >= net45
-    Microsoft.CodeAnalysis.Common (0.6.4033103-beta) - framework: >= net45
-    Microsoft.CodeAnalysis.CSharp (0.6.4033103-beta) - framework: >= net45
-    Microsoft.CodeAnalysis.CSharp.Workspaces (0.6.4033103-beta) - framework: >= net45
-    Microsoft.CodeAnalysis.VisualBasic (0.6.4033103-beta) - framework: >= net45
-    Microsoft.CodeAnalysis.VisualBasic.Workspaces (0.6.4033103-beta) - framework: >= net45
-    Microsoft.CodeAnalysis.Workspaces.Common (0.6.4033103-beta) - framework: >= net45
+    Microsoft.Bcl.Immutable (1.1.20-beta)
+    Microsoft.Bcl.Metadata (1.0.9-alpha)
+      Microsoft.Bcl.Immutable (>= 1.1.20-beta)
+    Microsoft.CodeAnalysis (0.6.4033103-beta)
+      Microsoft.CodeAnalysis.CSharp.Workspaces (>= 0.6.4033103-beta)
+      Microsoft.CodeAnalysis.VisualBasic.Workspaces (>= 0.6.4033103-beta)
+    Microsoft.CodeAnalysis.CodeActions (0.6.4033103-beta)
+      Microsoft.CodeAnalysis.Workspaces.Common (>= 0.6.4033103-beta)
+    Microsoft.CodeAnalysis.Common (0.6.4033103-beta)
+      Microsoft.Bcl.Immutable (>= 1.1.20-beta)
+      Microsoft.Bcl.Metadata (>= 1.0.9-alpha)
+    Microsoft.CodeAnalysis.CSharp (0.6.4033103-beta)
+      Microsoft.CodeAnalysis.Common (>= 0.6.4033103-beta)
+    Microsoft.CodeAnalysis.CSharp.Workspaces (0.6.4033103-beta)
+      Microsoft.CodeAnalysis.CSharp (>= 0.6.4033103-beta)
+      Microsoft.CodeAnalysis.Workspaces.Common (>= 0.6.4033103-beta)
+    Microsoft.CodeAnalysis.VisualBasic (0.6.4033103-beta)
+      Microsoft.CodeAnalysis.Common (>= 0.6.4033103-beta)
+    Microsoft.CodeAnalysis.VisualBasic.Workspaces (0.6.4033103-beta)
+      Microsoft.CodeAnalysis.VisualBasic (>= 0.6.4033103-beta)
+      Microsoft.CodeAnalysis.Workspaces.Common (>= 0.6.4033103-beta)
+    Microsoft.CodeAnalysis.Workspaces.Common (0.6.4033103-beta)
+      Microsoft.CodeAnalysis.Common (>= 0.6.4033103-beta)
