@@ -1,0 +1,10 @@
+Microsoft.Bcl.Immutable
+Microsoft.Bcl.Metadata
+Microsoft.CodeAnalysis
+Microsoft.CodeAnalysis.CodeActions
+Microsoft.CodeAnalysis.Common
+Microsoft.CodeAnalysis.CSharp
+Microsoft.CodeAnalysis.CSharp.Workspaces
+Microsoft.CodeAnalysis.VisualBasic
+Microsoft.CodeAnalysis.VisualBasic.Workspaces
+Microsoft.CodeAnalysis.Workspaces.Common

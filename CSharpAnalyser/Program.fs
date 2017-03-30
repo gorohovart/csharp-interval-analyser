@@ -20,7 +20,7 @@ let ParseStatement statement =
 
 
 let maker () = 
-    let filePath = @"C:\Users\Artem Gorokhov\Documents\visual studio 2015\Projects\ConsoleApplication1\ConsoleApplication1\Program.cs"
+    let filePath = @"../../test.cs"
     //let workspace = MSBuildWorkspace.Create()
     
     

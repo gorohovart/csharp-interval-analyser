@@ -1,3 +1,0 @@
-C:\Users\artem\AppData\Local\Microsoft\VisualStudio\14.0Roslyn\Extensions\Roslyn (Microsoft)\Diagnostics\1.0\\Diagnostics.dll
-C:\Users\artem\AppData\Local\Microsoft\VisualStudio\14.0Roslyn\Extensions\Roslyn (Microsoft)\Diagnostics\1.0\\Microsoft.CodeAnalysis.Features.dll
-C:\Users\artem\AppData\Local\Microsoft\VisualStudio\14.0Roslyn\Extensions\Roslyn (Microsoft)\Diagnostics\1.0\\extension.vsixmanifest
