@@ -55,9 +55,9 @@
     <None Include="App.config" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Diagnostics\DiagnosticsTools.csproj">
+    <ProjectReference Include="..\DiagnosticsTools\DiagnosticsTools.csproj">
       <Name>DiagnosticsTools</Name>
-      <Project>{da583067-bcc4-4687-bb57-fd3a6a782ba7}</Project>
+      <Project>{1a66b716-20f1-4550-b73a-6db5d01addc5}</Project>
       <Private>True</Private>
     </ProjectReference>
   </ItemGroup>

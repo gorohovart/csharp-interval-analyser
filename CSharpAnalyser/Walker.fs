@@ -80,6 +80,7 @@ let blockWalker (block : ControlFlowBasicBlock) (vars : Dictionary<string,Interv
         match statement.CSharpKind() with
         | SyntaxKind.VariableDeclaration -> 
             let variableDecl = (statement :?> LocalDeclarationStatementSyntax).Declaration
+            let typeOfVars = variableDecl.Type.GetText().ToString()
             let variables = variableDecl.Variables
             for variable in variables do
                 let varName = variable.Identifier.Text
@@ -134,11 +135,17 @@ let splitByCondition (vars : Dictionary<string,Interval list>) (cond : Expressio
         let leftExpr = conditionExpression.Left
         let rightExpr = conditionExpression.Right
         match conditionExpression.CSharpKind() with
-        | SyntaxKind.LessThanExpression -> 
-        | SyntaxKind.LessThanOrEqualExpression -> 
-        | SyntaxKind.GreaterThanExpression -> 
-        | SyntaxKind.GreaterThanOrEqualExpression -> 
+        | SyntaxKind.LessThanExpression -> ()
+        | SyntaxKind.LessThanOrEqualExpression -> ()
+        | SyntaxKind.GreaterThanExpression -> ()
+        | SyntaxKind.GreaterThanOrEqualExpression -> ()
+        | SyntaxKind.LogicalAndExpression -> ()
+        | SyntaxKind.LogicalOrExpression -> ()
         | _ -> failwith "unsupported type on binary condition"
+    | :? PrefixUnaryExpressionSyntax as unaryExpression ->
+        match unaryExpression.CSharpKind() with
+        | SyntaxKind.LogicalNotExpression -> ()
+        | _ -> failwith "unsupported type on unary condition"
     | _ -> failwith "unsupported type on condition"
     vars, vars
 
