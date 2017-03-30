@@ -11,8 +11,6 @@ open Microsoft.CodeAnalysis.CSharp.Syntax
 open Microsoft.CodeAnalysis.MSBuild
 open Intervals
 
-
-
 let invocation inv = 
     ()
 
@@ -27,15 +25,17 @@ let getProbsSum (values : List<VarValues * double>) : double =
 
 let binaryOp left right (op : SyntaxToken) : VarValues = 
     /// todo
+    let minG = 1
+    let maxG = 1
+    let maker operation = 
+        (max(minG, Int32.MinValue),
+            min(maxG, Int32.MaxValue))
+        left
     match op.Text with
-    | "+" -> 
-        left
-    | "-" -> 
-        left
-    | "/" -> 
-        left
-    | "*" -> 
-        left
+    | "+" -> maker (+)
+    | "-" -> maker (-)
+    | "/" -> maker (/)
+    | "*" -> maker (*)
     | _ -> failwith "todo: unsupported binary operation"
 
 let rec expression (expr : ExpressionSyntax) (vars : Dictionary<_,_>) : VarValues= 
@@ -73,7 +73,7 @@ let blockWalker (block : ControlFlowBasicBlock) (vars : Dictionary<string,List<V
                     let value = expression expr vars
                     outVars.Add(varName, new List<_>([|value, 1.0|]))
                 else
-                    outVars.Add(varName, new List<_>())
+                    outVars.Add(varName, new List<_>([|Interval(Value 0,Value 0), 1.0|]))
         | SyntaxKind.ExpressionStatement -> 
             let exprStmt = statement :?> ExpressionStatementSyntax//AssignmentExpressionSyntax
             let expr = exprStmt.Expression
