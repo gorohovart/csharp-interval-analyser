@@ -1,15 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 using Microsoft.CodeAnalysis;
-
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using System.Collections.Immutable;
 
-namespace DiagnosticsTools
+namespace CSharpAnalyzers.ControlFlowGraph
 {
     public class ControlFlowGraph
     {
@@ -20,20 +18,29 @@ namespace DiagnosticsTools
             InNodes = new Dictionary<ControlFlowBasicBlock, List<ControlFlowBasicBlock>>();
             foreach (var block in basicBlocks)
             {
-                if (InNodes.ContainsKey(block.FalseSuccessor))
-                    InNodes[block.FalseSuccessor].Add(block);
-                else
-                    InNodes.Add(block.FalseSuccessor, new List<ControlFlowBasicBlock> { block });
+                if (block.FalseSuccessor != null)
+                {
+                    if (InNodes.ContainsKey(block.FalseSuccessor))
+                        InNodes[block.FalseSuccessor].Add(block);
+                    else
+                        InNodes.Add(block.FalseSuccessor, new List<ControlFlowBasicBlock> { block });
+                }
 
-                if (InNodes.ContainsKey(block.TrueSuccessor))
-                    InNodes[block.TrueSuccessor].Add(block);
-                else
-                    InNodes.Add(block.TrueSuccessor, new List<ControlFlowBasicBlock> { block });
+                if (block.TrueSuccessor != null)
+                {
+                    if (InNodes.ContainsKey(block.TrueSuccessor))
+                        InNodes[block.TrueSuccessor].Add(block);
+                    else
+                        InNodes.Add(block.TrueSuccessor, new List<ControlFlowBasicBlock> {block});
+                }
 
-                if (InNodes.ContainsKey(block.Successor))
-                    InNodes[block.Successor].Add(block);
-                else
-                    InNodes.Add(block.Successor, new List<ControlFlowBasicBlock> { block });
+                if (block.Successor != null)
+                {
+                    if (InNodes.ContainsKey(block.Successor))
+                        InNodes[block.Successor].Add(block);
+                    else
+                        InNodes.Add(block.Successor, new List<ControlFlowBasicBlock> {block});
+                }
             }
         }
 
@@ -143,7 +150,7 @@ namespace DiagnosticsTools
                 // FIXME How comes a node can be null here?
                 if (node != null)
                 {
-                    if (supportedKinds.Contains(node.CSharpKind()))
+                    if (supportedKinds.Contains(node.Kind()))
                     {
                         currentBasicBlock.Statements.Add(node);
                     }
