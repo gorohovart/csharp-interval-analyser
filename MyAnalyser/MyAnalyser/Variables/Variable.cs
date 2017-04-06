@@ -4,7 +4,7 @@ using System.Linq;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
 
-namespace MyAnalyser.Variables
+namespace MyAnalyser.VarStructures
 {
     //public class Variable
     //{

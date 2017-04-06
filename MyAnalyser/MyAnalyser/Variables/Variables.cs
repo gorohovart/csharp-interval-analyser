@@ -1,6 +1,6 @@
 ﻿using System.Collections.Generic;
 
-namespace MyAnalyser.Variables
+namespace MyAnalyser.VarStructures
 {
     public class Variables
     {
@@ -14,6 +14,7 @@ namespace MyAnalyser.Variables
         public Variables(Variables oldVariables)
         {
             Values = new Dictionary<string, Primitive>();
+            if (oldVariables.Values == null) return;
             foreach (var pair in oldVariables.Values)
             {
                 Values.Add(pair.Key, pair.Value.GetCopy());

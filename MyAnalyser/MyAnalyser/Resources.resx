@@ -137,4 +137,21 @@
     <value>asdqweasdqwe</value>
     <comment>The title of the diagnostic.</comment>
   </data>
+  <data name="Description" xml:space="preserve">
+    <value>asdadsf.</value>
+    <comment>An optional longer localizable description of the diagnostic.</comment>
+  </data>
+  <data name="MessageFormat" xml:space="preserve">
+    <value>Error in '{0}' bla '{1}'.</value>
+    <comment>The format-able message the diagnostic displays.</comment>
+  </data>
+  <data name="Title" xml:space="preserve">
+    <value>asdqweasdqwe</value>
+    <comment>The title of the diagnostic.</comment>
+  </data>
+
+  <data name="TypeOwerflowMessageFormat" xml:space="preserve">
+    <value>Possible type owerflow.</value>
+    <comment>The format-able message the diagnostic displays.</comment>
+  </data>
 </root>

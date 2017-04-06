@@ -34,8 +34,10 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="BlockAnalyser.cs" />
     <Compile Include="ControlFlowBasicBlock.cs" />
     <Compile Include="ControlFlowGraph.cs" />
+    <Compile Include="ErrorNotifier.cs" />
     <Compile Include="MethodStartedAnalyser.cs" />
     <Compile Include="MethodAnalyser.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

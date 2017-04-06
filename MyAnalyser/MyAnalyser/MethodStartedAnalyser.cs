@@ -15,12 +15,12 @@ namespace MyAnalyser
     public class MethodStartedAnalyser : DiagnosticAnalyzer
     {
         #region Descriptor fields
-
         internal static readonly LocalizableString Title = new LocalizableResourceString(nameof(Resources.MethodStartedAnalyzerTitle), Resources.ResourceManager, typeof(Resources));
-        internal static readonly LocalizableString MessageFormat = new LocalizableResourceString(nameof(Resources.MethodStartedAnalyzerMessageFormat), Resources.ResourceManager, typeof(Resources));
+        internal static readonly LocalizableString MessageFormat = new LocalizableResourceString(nameof(Resources.TypeOwerflowMessageFormat), Resources.ResourceManager, typeof(Resources));
         internal static readonly LocalizableString Description = new LocalizableResourceString(nameof(Resources.MethodStartedAnalyzerDescription), Resources.ResourceManager, typeof(Resources));
 
         internal static DiagnosticDescriptor Rule = new DiagnosticDescriptor("IntervalAnalysys", Title, MessageFormat, "SampleStatefulAnalyzers", DiagnosticSeverity.Warning, isEnabledByDefault: true, description: Description);
+
 
         #endregion
 
@@ -43,15 +43,18 @@ namespace MyAnalyser
                 //    return;
                 //}
                 var rootOfBlock = startCodeBlockContext.CodeBlock;
-                try
-                {
-                    var x = new MethodAnalyser(method, rootOfBlock, startCodeBlockContext.SemanticModel, Rule);
-                    startCodeBlockContext.RegisterCodeBlockEndAction(x.ShowVariablesList);
-                }
-                catch (Exception e)
-                {
+
+                var x = new MethodAnalyser(method, rootOfBlock, startCodeBlockContext.SemanticModel, Rule);
+                startCodeBlockContext.RegisterCodeBlockEndAction(x.ShowErrors);
+                //try
+                //{
+                //    var x = new MethodAnalyser(method, rootOfBlock, startCodeBlockContext.SemanticModel, Rule);
+                //    startCodeBlockContext.RegisterCodeBlockEndAction(x.ShowErrors);
+                //}
+                //catch (Exception e)
+                //{
                     
-                }
+                //}
 
 
                 // Initialize local mutable state in the start action.

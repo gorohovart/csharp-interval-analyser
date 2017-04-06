@@ -82,6 +82,24 @@ namespace MyAnalyser {
         /// <summary>
         ///   Looks up a localized string similar to asdadsf..
         /// </summary>
+        internal static string Description {
+            get {
+                return ResourceManager.GetString("Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Error in &apos;{0}&apos; bla &apos;{1}&apos;..
+        /// </summary>
+        internal static string MessageFormat {
+            get {
+                return ResourceManager.GetString("MessageFormat", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to asdadsf..
+        /// </summary>
         internal static string MethodStartedAnalyzerDescription {
             get {
                 return ResourceManager.GetString("MethodStartedAnalyzerDescription", resourceCulture);
@@ -103,6 +121,24 @@ namespace MyAnalyser {
         internal static string MethodStartedAnalyzerTitle {
             get {
                 return ResourceManager.GetString("MethodStartedAnalyzerTitle", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to asdqweasdqwe.
+        /// </summary>
+        internal static string Title {
+            get {
+                return ResourceManager.GetString("Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Possible type owerflow..
+        /// </summary>
+        internal static string TypeOwerflowMessageFormat {
+            get {
+                return ResourceManager.GetString("TypeOwerflowMessageFormat", resourceCulture);
             }
         }
     }

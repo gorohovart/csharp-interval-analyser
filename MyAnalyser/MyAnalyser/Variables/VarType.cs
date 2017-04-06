@@ -1,4 +1,4 @@
-﻿namespace MyAnalyser.Variables
+﻿namespace MyAnalyser.VarStructures
 {
     public enum NullableVarValue
     {
