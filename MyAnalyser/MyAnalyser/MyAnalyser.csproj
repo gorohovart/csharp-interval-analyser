@@ -44,6 +44,10 @@
       <DesignTime>True</DesignTime>
       <DependentUpon>Resources.resx</DependentUpon>
     </Compile>
+    <Compile Include="Variables\Variable.cs" />
+    <Compile Include="Variables\Variables.cs" />
+    <Compile Include="Variables\VarType.cs" />
+    <Compile Include="Variables\VarValue.cs" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Resources.resx">

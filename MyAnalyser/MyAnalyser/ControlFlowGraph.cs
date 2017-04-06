@@ -122,7 +122,8 @@ namespace CSharpAnalyzers.ControlFlowGraph
         {
             private readonly ImmutableHashSet<SyntaxKind> supportedKinds = new[]
             {
-                SyntaxKind.VariableDeclaration,
+                //SyntaxKind.VariableDeclaration,
+                SyntaxKind.LocalDeclarationStatement, 
                 SyntaxKind.ExpressionStatement,
                 SyntaxKind.ReturnStatement,
                 //SyntaxKind.EqualsExpression,

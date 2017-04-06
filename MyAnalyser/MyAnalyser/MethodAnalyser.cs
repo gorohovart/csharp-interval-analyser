@@ -3,11 +3,13 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
 using CSharpAnalyzers.ControlFlowGraph;
+using MyAnalyser.Variables;
 
 namespace CSharpAnalyzers
 {
@@ -15,19 +17,19 @@ namespace CSharpAnalyzers
     {
         private static int minValue = Int32.MinValue;
         private static int maxValue = Int32.MaxValue;
-        private DiagnosticDescriptor Rule;
+        private readonly DiagnosticDescriptor Rule;
         public List<Tuple<string, Location>> VariablesList = new List<Tuple<string, Location>>();
 
         public MethodAnalyser(IMethodSymbol node, SyntaxNode root, SemanticModel model, DiagnosticDescriptor rule)
         {
             Rule = rule;
-            var vars = new Dictionary<string, List<Interval>>();
+            var vars = new Variables();
             foreach (var parameter in node.Parameters)
             {
                 var paramType = parameter.Type;
                 var paramName = parameter.Name;
-                if(paramType.ToString() == "int")
-                    vars.Add(paramName, new List<Interval>{new Interval(minValue, maxValue)});
+                if (paramType.ToString() == "int")
+                    vars.Values.Add(paramName, new PrimitiveValue("", minValue, maxValue));
             }
                 
 
@@ -39,11 +41,29 @@ namespace CSharpAnalyzers
             //File.WriteAllText(@"C:\Code\roslyn\src\Samples\CSharp\Analyzers\" + new Random().Next(1000) + "cfg.dot", cfg.ToGraph());
         }
 
-        private List<Interval> BinaryOp(List<Interval> left, List<Interval> right, SyntaxToken op)
+        private static bool TryGetType(Type type, string typeName, out string outType, out bool isArray)
         {
-            var result = new List<Interval>();
-            foreach(var leftInterval in left)
-            foreach (var rightInterval in right)
+            string[] alowedTypes = {"int", "int16"};
+            isArray = type.GetTypeInfo().IsArray;
+            if (type.GetTypeInfo().IsPrimitive)
+            {
+                if (alowedTypes.Contains(typeName))
+                {
+                    outType = typeName;
+                    return true;
+                }
+                outType = "";
+                return false;
+            }
+            outType = typeName;
+            return false;
+        }
+
+        private PrimitiveValue BinaryOp(PrimitiveValue left, PrimitiveValue right, SyntaxToken op)
+        {
+            var result = new PrimitiveValue("");
+            foreach(var leftInterval in left.Intervals)
+            foreach (var rightInterval in right.Intervals)
             {
                 int[] G;
                 int minG, maxG;
@@ -63,7 +83,7 @@ namespace CSharpAnalyzers
                         minG = G.Min();
                         maxG = G.Max();
 
-                        result.Add(new Interval(Math.Max(minG, minValue), Math.Min(maxG, maxValue)));
+                        result.Intervals.Add(new Interval<int>(Math.Max(minG, minValue), Math.Min(maxG, maxValue)));
                         break;
                     case "-":
                         G = new[]
@@ -79,7 +99,7 @@ namespace CSharpAnalyzers
                         minG = G.Min();
                         maxG = G.Max();
 
-                        result.Add(new Interval(Math.Max(minG, minValue), Math.Min(maxG, maxValue)));
+                        result.Intervals.Add(new Interval<int>(Math.Max(minG, minValue), Math.Min(maxG, maxValue)));
                         break;
                     case "/":
                         G = new[]
@@ -95,7 +115,7 @@ namespace CSharpAnalyzers
                         minG = G.Min();
                         maxG = G.Max();
 
-                        result.Add(new Interval(Math.Max(minG, minValue), Math.Min(maxG, maxValue)));
+                        result.Intervals.Add(new Interval<int>(Math.Max(minG, minValue), Math.Min(maxG, maxValue)));
                         break;
                     case "*":
                         G = new[]
@@ -111,7 +131,7 @@ namespace CSharpAnalyzers
                         minG = G.Min();
                         maxG = G.Max();
 
-                        result.Add(new Interval(Math.Max(minG, minValue), Math.Min(maxG, maxValue)));
+                        result.Intervals.Add(new Interval<int>(Math.Max(minG, minValue), Math.Min(maxG, maxValue)));
                         break;
                     default:
                         break;
@@ -120,115 +140,205 @@ namespace CSharpAnalyzers
             return result;
         }
 
-        private List<Interval> Expression(ExpressionSyntax expr, Dictionary<string, List<Interval>> vars)
+        private Primitive Expression(ExpressionSyntax expr, Variables vars)
         {
-            //var outVars;
             var binExpr = expr as BinaryExpressionSyntax;
-            var inv = expr as InvocationExpressionSyntax;
+            var invocationExpression = expr as InvocationExpressionSyntax;
             var literal = expr as LiteralExpressionSyntax;
-            var ident = expr as IdentifierNameSyntax;
-            List<Interval> result;
+            var identifierName = expr as IdentifierNameSyntax;
+            var initializerExpression = expr as InitializerExpressionSyntax;
+            Primitive result;
             if (binExpr != null)
             { 
-                var left = Expression(binExpr.Left, vars);
-                var right = Expression(binExpr.Right, vars);
+                var left = (PrimitiveValue)Expression(binExpr.Left, vars);
+                var right = (PrimitiveValue)Expression(binExpr.Right, vars);
                 var operation = binExpr.OperatorToken;
                 result = BinaryOp(left, right, operation);
             }
-            else if(inv != null)
+            else if(invocationExpression != null)
             {
-                result = new List<Interval> {new Interval(minValue, maxValue)};
+                result = new PrimitiveValue("") { Intervals = new List<Interval<int>> { new Interval<int>(minValue, maxValue) } };
             }
             else if (literal != null)
             {
                 var value = Int32.Parse(literal.Token.Text);
-                result = new List<Interval> {new Interval(value, value)};
+                result = new PrimitiveValue("") {Intervals = new List<Interval<int>>{new Interval<int>(value, value)}};
             }
-            else if (ident != null)
+            else if (identifierName != null)
             {
-                var identName = ident.Identifier.Text;
-                result = vars[identName];
+                var identName = identifierName.Identifier.Text;
+                result = vars.Values[identName];
+            }
+            else if (initializerExpression != null)
+            {
+                var lengthOfArray = initializerExpression.Expressions.Count;
+                var elemsOfArray = initializerExpression.Expressions;
+
+                result = new PrimitiveArray("", lengthOfArray);
+                for (var i = 0; i < lengthOfArray; i++)
+                {
+                    var value = VariableInitializer(elemsOfArray[i], vars);
+                    ((PrimitiveArray)result).Elements[i] = value;
+                }
             }
             else
                 throw new Exception("todo: unsupported expression type");
             return result;
         }
 
-        private Dictionary<string, List<Interval>> BlockWalker(ControlFlowBasicBlock block,
-            Dictionary<string, List<Interval>> vars, SemanticModel semanticModel)
-        {
-            var outVars = new Dictionary<string, List<Interval>>(vars);
-            foreach (var statement in block.Statements)
-            {
-                switch (statement.Kind())
-                {
-                    case SyntaxKind.VariableDeclaration:
-                        var variableDecl = (VariableDeclarationSyntax) statement;
-                        var typeOfVars = semanticModel.GetSymbolInfo(variableDecl.Type);
-                        var nameOfType = typeOfVars.Symbol.ToString();
-                        VariablesList.Add(new Tuple<string, Location>(nameOfType, variableDecl.GetLocation()));
-                        //printfn "Type: %s" nameOfType
-                        if (nameOfType != "int" && nameOfType != "Int32") break;
-                        var variables = variableDecl.Variables;
-                        foreach (var variable in variables)
-                        {
-                            var varName = variable.Identifier.Text;
-                            if (outVars.ContainsKey(varName))
-                                throw new Exception("Declaration of already declared variable");
-                            if (variable.Initializer != null)
-                            {
-                                var initExpression = variable.Initializer.Value;
-                                var value = Expression(initExpression, outVars);
-                                outVars.Add(varName, value);
-                            }
-                            else
-                                outVars.Add(varName, new List<Interval> {new Interval(0, 0)});
-                        }
-                        break;
-                    case SyntaxKind.ExpressionStatement:
-                        var exprStmt = (ExpressionStatementSyntax) statement;
-                        var expr = exprStmt.Expression;
-                        switch (expr.Kind())
-                        {
-                            case SyntaxKind.SimpleAssignmentExpression:
+        //private void UnaryExpression(ExpressionSyntax expr, Variables vars)
 
-                                var binOp = (AssignmentExpressionSyntax) expr;
-                                var varName = ((IdentifierNameSyntax) binOp.Left).Identifier.Text;
-                                if (outVars.ContainsKey(varName))
-                                {
-                                    //                    var probsSum = getProbsSum outVars.[varName]
-                                    var value = Expression(binOp.Right, outVars);
-                                    //                    var x = value |> List.map (fun x -> Interval(x.Low, x.High, x.Prob * probsSum))
-                                    outVars.Remove(varName);
-                                    outVars.Add(varName, value);
-                                }
-                                else
-                                    throw new Exception("assignment of undeclared variable");
-                                break;
-                            case SyntaxKind.InvocationExpression:
-                                break;
-                            default:
-                                throw new Exception("todo unsupported type of expression");
-                        }
-                        break;
-                    case (SyntaxKind.ReturnStatement):
-                        break;
-                        throw new Exception("todo unsupported RETURN expression");
-                    default:
-                        throw new Exception("todo unsupported type of expression");
-                    // undeclare vars defined in block
+        private void StatementExpression(ExpressionSyntax expr, Variables vars)
+        {
+            var invocationExpr = expr as InvocationExpressionSyntax;
+            var assignmentExpr = expr as AssignmentExpressionSyntax;
+            var postUnaryExpr = expr as PostfixUnaryExpressionSyntax;
+            var preUnaryExpr = expr as PrefixUnaryExpressionSyntax;
+            var objCreationExpr = expr as ObjectCreationExpressionSyntax;
+            if (assignmentExpr != null)
+            {
+                if (assignmentExpr.Left.IsKind(SyntaxKind.IdentifierName))
+                {   // variable = ...
+                    var varName = ((IdentifierNameSyntax)assignmentExpr.Left).Identifier.Text;
+                    var newVar = Expression(assignmentExpr.Right, vars);
+                    vars.Values.Remove(varName);
+                    vars.Values.Add(varName, newVar);
+                }
+                else if (assignmentExpr.Left.IsKind(SyntaxKind.ElementAccessExpression))
+                {
+                    // todo: check partial access
+                    var elementAccess = (ElementAccessExpressionSyntax) assignmentExpr.Left;
+                    var arrayName = ((IdentifierNameSyntax)elementAccess.Expression).Identifier.Text;
+                    foreach (var arg in elementAccess.ArgumentList.Arguments)
+                    {
+                        var res = Expression(arg.Expression, vars);
+                        //todo: check for out of array bounds
+                    }
+                    
+                    var exprValue = Expression(assignmentExpr.Right, vars);
+                    // todo: check for out of type bounds
+                    var arrayVar = (PrimitiveArray)vars.Values[arrayName];
+
                 }
             }
-            var v = new Dictionary<string, List<Interval>>();
-            foreach (var pair in outVars)
+            else if (invocationExpr != null)
             {
-                if (vars.ContainsKey(pair.Key))
-                    v.Add(pair.Key, pair.Value);
+                throw new Exception("todo unsupported invocation expression");
+            }   
+            else if (postUnaryExpr != null)
+            {
+                throw new Exception("todo unsupported postUnary expression");
             }
-            return v;
+            else if (preUnaryExpr != null)
+            {
+                throw new Exception("todo unsupported preUnary expression");
+            }
+            else if (objCreationExpr != null)
+            {
+                throw new Exception("todo unsupported objCreation expression");
+            }
+            
         }
 
-        private Tuple<Dictionary<string,List<Interval>>, Dictionary<string, List<Interval>>> SplitByCondition(Dictionary<string, List<Interval>> vars, ExpressionSyntax cond)
+        private Primitive VariableInitializer(ExpressionSyntax expr, Variables vars)
+        {
+            Primitive newVar;
+            if (expr is InitializerExpressionSyntax)
+            {
+                var initializerExpression = (InitializerExpressionSyntax) expr;
+                var lengthOfArray = initializerExpression.Expressions.Count;
+                var elemsOfArray = initializerExpression.Expressions;
+
+                newVar = new PrimitiveArray("", lengthOfArray);
+                for (var i = 0; i < lengthOfArray; i++)
+                {
+                    var value = VariableInitializer(elemsOfArray[i], vars);
+                    ((PrimitiveArray)newVar).Elements[i] = value;
+                }
+            }
+            else
+            {
+                newVar = Expression(expr, vars);
+            }
+            return newVar;
+        }
+
+        private void DeclarationStatement(LocalDeclarationStatementSyntax declaration,
+            Variables vars, SemanticModel semanticModel)
+        {   
+            var variableDecl = declaration.Declaration;
+            var modifiers = declaration.Modifiers;
+            var typeOfVars = semanticModel.GetSymbolInfo(variableDecl.Type);
+            var nameOfType = typeOfVars.Symbol.ToString();
+
+            VariablesList.Add(new Tuple<string, Location>(nameOfType, variableDecl.GetLocation()));
+            //printfn "Type: %s" nameOfType
+            //if (nameOfType != "int" && nameOfType != "Int32") break;
+            bool isConst = modifiers.Select(x => x.Text).Contains("const");
+            string outName;
+            bool isArray;
+            if (!TryGetType(typeOfVars.GetType(), nameOfType, out outName, out isArray)) return;
+
+            foreach (var variableDeclarator in variableDecl.Variables)
+            {
+                var varName = variableDeclarator.Identifier.Text;
+                if (vars.Values.ContainsKey(varName))
+                    throw new Exception("Declaration of already declared variable");
+
+                Primitive newVar;
+                if (variableDeclarator.Initializer != null)
+                {
+                    newVar = VariableInitializer(variableDeclarator.Initializer.Value, vars);
+                }
+                else if (isArray)
+                {
+                    newVar = new PrimitiveArray(nameOfType);
+                }
+                else
+                {
+                    newVar = new PrimitiveValue(nameOfType);
+                }
+                vars.Values.Add(varName, newVar);
+            }
+        }
+
+        private void ReturnStatement(ReturnStatementSyntax expr, Variables vars)
+        {
+            throw new Exception("todo unsupported RETURN expression");
+        }
+
+        private Variables BlockWalker(ControlFlowBasicBlock block,
+            Variables vars, SemanticModel semanticModel)
+        {
+            var outVars = new Variables(vars);
+            foreach (var statement in block.Statements)
+            {
+                if (statement.IsKind(SyntaxKind.LocalDeclarationStatement))
+                {
+                    var variableDecl = (LocalDeclarationStatementSyntax) statement;
+                    DeclarationStatement(variableDecl, outVars, semanticModel);
+                }
+                else if (statement.IsKind(SyntaxKind.ExpressionStatement))
+                {
+                    var exprStmt = (ExpressionStatementSyntax) statement;
+                    var expr = exprStmt.Expression;
+                    StatementExpression(expr, outVars);
+                }
+                else if (statement.IsKind(SyntaxKind.ReturnStatement))
+                    ReturnStatement((ReturnStatementSyntax) statement, outVars);
+                else
+                    throw new Exception("todo unsupported type of expression");
+            }
+            //var v = new Variables();
+            //foreach (var pair in outVars)
+            //{
+            //    if (vars.ContainsVariable(pair.Key))
+            //        v.Add(pair.Key, pair.Value);
+            //}
+            return outVars;
+        }
+
+        private Tuple<Variables, Variables> SplitByCondition(Variables vars, ExpressionSyntax cond)
         {
             var conditionExpression = cond as BinaryExpressionSyntax;
             var unaryExpression = cond as PrefixUnaryExpressionSyntax;
@@ -271,56 +381,52 @@ namespace CSharpAnalyzers
                 throw new Exception("unsupported type on condition");
             }
             // todo
-            return new Tuple<Dictionary<string, List<Interval>>, Dictionary<string, List<Interval>>>(vars, vars);
+            return new Tuple<Variables, Variables>(vars, vars);
         }
 
-        private void tryAddToQ(ControlFlowGraph.ControlFlowGraph cfg, ControlFlowBasicBlock block , Dictionary<string, List<Interval>> vars,
-            Dictionary<ControlFlowBasicBlock, List<Dictionary<string, List<Interval>>>> blocksInVars,
-            Queue<Tuple<ControlFlowBasicBlock, Dictionary<string,List<Interval>>>> blocksToProcess)
+        private void tryAddToQ(ControlFlowGraph.ControlFlowGraph cfg, ControlFlowBasicBlock block , Variables vars,
+            Dictionary<ControlFlowBasicBlock, List<Variables>> blocksInVars,
+            Queue<Tuple<ControlFlowBasicBlock, Variables>> blocksToProcess)
         {
             if (blocksInVars.ContainsKey(block))
 
                 blocksInVars[block].Add(vars);
             else
             {
-                var list = new List<Dictionary<string, List<Interval>>> {vars};
+                var list = new List<Variables> {vars};
                 blocksInVars.Add(block, list);
             }
             if(blocksInVars[block].Count == cfg.InNodes[block].Count)
             {
-                var union = new Dictionary<string, List<Interval>>(blocksInVars[block][0]);
-                for(int i = 1; i < blocksInVars[block].Count; i++)
+                var union = new Variables(blocksInVars[block][0]);
+                for(var i = 1; i < blocksInVars[block].Count; i++)
                 {
-                    foreach(var pair in blocksInVars[block][i])
+                    foreach(var pair in blocksInVars[block][i].Values)
                     {
-                        List<Interval> value;
-                        var contains = union.TryGetValue(pair.Key,out value);
-                        if (contains)
+                        Primitive value;
+                        if (union.Values.TryGetValue(pair.Key, out value))
                         {
-                            union.Remove(pair.Key);
-                            var res = new List<Interval>(
-                                value.Concat(pair.Value).GroupBy(x => new Tuple<int, int>(x.High, x.Low))
-                                    .Select(x => new Interval(x.Key.Item1, x.Key.Item2)));
-                            union.Add(pair.Key, res);
+                            union.Values.Remove(pair.Key);
+                            var res = value.Concat(pair.Value);
+                            union.Values.Add(pair.Key, res);
                         }
                         else
-                            union.Add(pair.Key, pair.Value);
+                            union.Values.Add(pair.Key, pair.Value);
                     }
-}
-                blocksToProcess.Enqueue(new Tuple<ControlFlowBasicBlock, Dictionary<string, List<Interval>>>(block, union));
-
+                }
+                blocksToProcess.Enqueue(new Tuple<ControlFlowBasicBlock, Variables>(block, union));
             }
         }
 
 
-        private void CFGWalker(ControlFlowGraph.ControlFlowGraph cfg, Dictionary<string, List<Interval>> vars,
+        private void CFGWalker(ControlFlowGraph.ControlFlowGraph cfg, Variables vars,
             SemanticModel semanticModel)
         {
-            var blocksToProcess = new Queue<Tuple<ControlFlowBasicBlock, Dictionary<string, List<Interval>>>>();
-            blocksToProcess.Enqueue(new Tuple<ControlFlowBasicBlock, Dictionary<string, List<Interval>>>(
+            var blocksToProcess = new Queue<Tuple<ControlFlowBasicBlock, Variables>>();
+            blocksToProcess.Enqueue(new Tuple<ControlFlowBasicBlock, Variables>(
                 cfg.FirstBlock, vars));
 
-            var blocksInVars = new Dictionary<ControlFlowBasicBlock, List<Dictionary<string, List<Interval>>>>();
+            var blocksInVars = new Dictionary<ControlFlowBasicBlock, List<Variables>>();
 
             while (blocksToProcess.Count != 0)
             {
@@ -345,17 +451,6 @@ namespace CSharpAnalyzers
             }
         }
 
-        public struct Interval
-        {
-            public int Low;
-            public int High;
-
-            public Interval(int low, int high)
-            {
-                Low = low;
-                High = high;
-            }
-        }
 
         public void ShowVariablesList(CodeBlockAnalysisContext context)
         {
