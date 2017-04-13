@@ -139,15 +139,27 @@ namespace MyAnalyser
             return result;
         }
 
+        //private Primitive ConditionalExpression(ExpressionSyntax expr)
+        //{
+        //    var x = (10 == 4) || (11 == 1) ? 1 : 2;
+        //    Primitive result;
+        //    var
+        //}
+
         private Primitive Expression(ExpressionSyntax expr)
         {
+            var condExpr = expr as ConditionalExpressionSyntax;
             var binExpr = expr as BinaryExpressionSyntax;
             var invocationExpression = expr as InvocationExpressionSyntax;
             var literal = expr as LiteralExpressionSyntax;
             var identifierName = expr as IdentifierNameSyntax;
             var initializerExpression = expr as InitializerExpressionSyntax;
             Primitive result;
-            if (binExpr != null)
+            if (condExpr != null)
+            {
+                result = Expression(condExpr.Condition);
+            }
+            else if (binExpr != null)
             {
                 var left = (PrimitiveValue)Expression(binExpr.Left);
                 var right = (PrimitiveValue)Expression(binExpr.Right);
