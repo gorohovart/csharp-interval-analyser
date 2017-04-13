@@ -35,8 +35,8 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="BlockAnalyser.cs" />
-    <Compile Include="ControlFlowBasicBlock.cs" />
-    <Compile Include="ControlFlowGraph.cs" />
+    <Compile Include="CFG\ControlFlowBasicBlock.cs" />
+    <Compile Include="CFG\ControlFlowGraph.cs" />
     <Compile Include="ErrorNotifier.cs" />
     <Compile Include="MethodStartedAnalyser.cs" />
     <Compile Include="MethodAnalyser.cs" />
