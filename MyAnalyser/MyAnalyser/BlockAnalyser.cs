@@ -99,8 +99,9 @@ namespace MyAnalyser
             return x;
         }
 
-        private PrimitiveValue BinaryOp(PrimitiveValue left, PrimitiveValue right, SyntaxToken op, Location location)
+        private PrimitiveValue BinaryOp(PrimitiveValue left, PrimitiveValue right, SyntaxToken op)
         {
+            var location = op.GetLocation();
             var result = new PrimitiveValue("");
             foreach (var leftInterval in left.Intervals)
                 foreach (var rightInterval in right.Intervals)
@@ -108,22 +109,22 @@ namespace MyAnalyser
                     
                     int[] G;
                     int minG, maxG;
-                    if (op.Text == "+")
+                    if (op.Text == "+" || op.Text == "+=")
                     {
                         G = Op((x, y) => checked(x + y), (x, y) => x > 0 ? maxValue : minValue, leftInterval, rightInterval, location);
                     }
-                    else if (op.Text == "-")
+                    else if (op.Text == "-" || op.Text == "-=")
                     {
                         G = Op((x, y) => checked(x - y), (x, y) => x > 0 ? minValue : maxValue, leftInterval, rightInterval, location);
                     }
-                    else if (op.Text == "/")
+                    else if (op.Text == "/" || op.Text == "/=")
                     {
                         throw new Exception("unsupported division");
                         //G = Op((x, y) => x - y, (x, y) => x > 0 ? minValue : maxValue, leftInterval, rightInterval, location);
                     }
-                    else if (op.Text == "*")
+                    else if (op.Text == "*" || op.Text == "*=")
                     {
-                        G = Op((x, y) => checked(x * y), (x, y) => x > 0 ? (y > 0? maxValue : minValue): (y > 0 ? minValue : maxValue), leftInterval, rightInterval, location);
+                        G = Op((x, y) => checked(x / y), (x, y) => x > 0 ? (y > 0? maxValue : minValue): (y > 0 ? minValue : maxValue), leftInterval, rightInterval, location);
                     }
                     else
                     {
@@ -151,7 +152,7 @@ namespace MyAnalyser
                 var left = (PrimitiveValue)Expression(binExpr.Left);
                 var right = (PrimitiveValue)Expression(binExpr.Right);
                 var operation = binExpr.OperatorToken;
-                result = BinaryOp(left, right, operation, binExpr.GetLocation());
+                result = BinaryOp(left, right, operation);
             }
             else if (invocationExpression != null)
             {
@@ -195,6 +196,38 @@ namespace MyAnalyser
 
         //private void UnaryExpression(ExpressionSyntax expr, Variables vars)
 
+        private PrimitiveArray ErrorsCheck(string arrayName, SeparatedSyntaxList<ArgumentSyntax> args)
+        {
+            Primitive var;
+            vars.Values.TryGetValue(arrayName, out var);
+
+            PrimitiveArray checkedArray = (PrimitiveArray)var;
+            for (var i = 0; i < args.Count; i++)
+            {
+                var length = checkedArray.Elements.Length;
+                var accessValues = (PrimitiveValue) Expression(args[i].Expression);
+                foreach (var interval in accessValues.Intervals)
+                {
+                    var isInBounds = (interval.Low >= 0) && (interval.Low <= length) && (interval.High >= 0) && (interval.High <= length);
+                    if (!isInBounds)
+                    {
+                        errorNotifier.AddOutOfArrayBounds(args[i].Expression.GetLocation());
+                    }
+                }
+                if (i+1 < args.Count)
+                    checkedArray = (PrimitiveArray)checkedArray.Elements[0];
+            }
+
+            return checkedArray;
+        }
+
+        private Primitive AssignmentOperatorHandler(Primitive oldValue, Primitive newValue, SyntaxToken op)
+        {
+            if (op.ToString() != "=")
+                return BinaryOp((PrimitiveValue)oldValue, (PrimitiveValue)newValue, op);
+            return newValue;
+        }
+
         private void StatementExpression(ExpressionSyntax expr)
         {
             var invocationExpr = expr as InvocationExpressionSyntax;
@@ -204,33 +237,28 @@ namespace MyAnalyser
             var objCreationExpr = expr as ObjectCreationExpressionSyntax;
             if (assignmentExpr != null)
             {
+                var operatorToken = assignmentExpr.OperatorToken;
+                var exprValue = Expression(assignmentExpr.Right);
                 if (assignmentExpr.Left.IsKind(SyntaxKind.IdentifierName))
-                {   // variable = ...
+                {
                     var varName = ((IdentifierNameSyntax)assignmentExpr.Left).Identifier.Text;
-                    var newVar = Expression(assignmentExpr.Right);
+                    var result = AssignmentOperatorHandler(vars.Values[varName], exprValue, operatorToken);
                     vars.Values.Remove(varName);
-                    vars.Values.Add(varName, newVar);
+                    vars.Values.Add(varName, result);
                 }
                 else if (assignmentExpr.Left.IsKind(SyntaxKind.ElementAccessExpression))
                 {
-                    // todo: check partial access
                     var elementAccess = (ElementAccessExpressionSyntax)assignmentExpr.Left;
                     var arrayName = ((IdentifierNameSyntax)elementAccess.Expression).Identifier.Text;
-                    foreach (var arg in elementAccess.ArgumentList.Arguments)
-                    {
-                        var res = Expression(arg.Expression);
-                        //todo: check for out of array bounds
-                    }
-
-                    var exprValue = Expression(assignmentExpr.Right);
-                    // todo: check for out of type bounds
-                    var arrayVar = (PrimitiveArray)vars.Values[arrayName];
-
+                    var args = elementAccess.ArgumentList.Arguments;
+                    var accessedArray = ErrorsCheck(arrayName, args);
+                    var result = AssignmentOperatorHandler(accessedArray.Elements[0], exprValue, operatorToken);
+                    accessedArray.Elements[0] = result;
                 }
             }
             else if (invocationExpr != null)
             {
-                throw new Exception("todo unsupported invocation expression");
+                // todo: check out params
             }
             else if (postUnaryExpr != null)
             {

@@ -29,5 +29,11 @@ namespace MyAnalyser
             if (Errors.ContainsKey(location)) return;
             Errors.Add(location,new Error("Possible type owerflow.", location));
         }
+
+        public void AddOutOfArrayBounds(Location location)
+        {
+            if (Errors.ContainsKey(location)) return;
+            Errors.Add(location, new Error("Possible out of bounds.", location));
+        }
     }
 }
