@@ -31,7 +31,7 @@ namespace CSharpAnalyzers
                 var paramType = parameter.Type;
                 var paramName = parameter.Name;
                 if (paramType.ToString() == "int")
-                    vars.Values.Add(paramName, new PrimitiveValue("", minValue, maxValue));
+                    vars.Values.Add(paramName, new PrimitiveValue(minValue, maxValue));
             }
 
             //let cfg = blockWalker node.Body vars     
@@ -41,84 +41,133 @@ namespace CSharpAnalyzers
             //File.WriteAllText(@"C:\Code\roslyn\src\Samples\CSharp\Analyzers\" + new Random().Next(1000) + "cfg.dot", cfg.ToGraph());
         }
 
-        private Tuple<Variables, Variables> SplitByCondition(Variables vars, ExpressionSyntax cond)
+        private Interval WideIntervals(Interval interval1, Interval interval2)
         {
-            var conditionExpression = cond as BinaryExpressionSyntax;
-            var unaryExpression = cond as PrefixUnaryExpressionSyntax;
-            if (conditionExpression != null)
-            {
-                var leftExpr = conditionExpression.Left;
-                var rightExpr = conditionExpression.Right;
-                switch (conditionExpression.Kind())
-                {
-                    case SyntaxKind.EqualsExpression:
-                        throw new Exception("unsupported type on binary condition");
-                    case SyntaxKind.LessThanExpression:
-                        throw new Exception("unsupported type on binary condition");
-                    case SyntaxKind.LessThanOrEqualExpression:
-                        throw new Exception("unsupported type on binary condition");
-                    case SyntaxKind.GreaterThanExpression:
-                        throw new Exception("unsupported type on binary condition");
-                    case SyntaxKind.GreaterThanOrEqualExpression:
-                        throw new Exception("unsupported type on binary condition");
-                    case SyntaxKind.LogicalAndExpression:
-                        throw new Exception("unsupported type on binary condition");
-                    case SyntaxKind.LogicalOrExpression:
-                        throw new Exception("unsupported type on binary condition");
-                    default: throw new Exception("unsupported type on binary condition");
-                        
-                }
-            }
-            else if (unaryExpression != null)
-            {
-                switch (unaryExpression.Kind())
-                {
-                    case SyntaxKind.LogicalNotExpression:
-                        throw new Exception("unsupported type on unary condition");
-                    default:
-                        throw new Exception("unsupported type on unary condition");
-                }
-            }
-            else
-            {
-                throw new Exception("unsupported type on condition");
-            }
-            // todo
-            return new Tuple<Variables, Variables>(vars, vars);
+            return Interval.Get(interval2.Low < interval1.Low ? Int32.MinValue : interval1.Low,
+                interval2.High > interval1.High ? Int32.MaxValue : interval1.High);
         }
 
-        private void tryAddToQ(ControlFlowGraph.ControlFlowGraph cfg, ControlFlowBasicBlock block , Variables vars,
-            Dictionary<ControlFlowBasicBlock, List<Variables>> blocksInVars,
+        private Primitive WidePrimitives(Primitive prim1, Primitive prim2)
+        {
+            var value1 = prim1 as PrimitiveValue;
+            var value2 = prim2 as PrimitiveValue;
+            if (value1 != null && value2 != null)
+            {
+                var interval1 = Interval.Get(value1.GetLow(), value1.GetHigh());
+                var interval2 = Interval.Get(value1.GetLow(), value1.GetHigh());
+
+                return new PrimitiveValue(WideIntervals(interval1, interval2));
+            }
+            var arr1 = prim1 as PrimitiveArray;
+            var arr2 = prim2 as PrimitiveArray;
+            if (arr1 != null && arr2 != null)
+            {
+                return arr2;
+            }
+            throw new Exception("Type casting exeption while widening");
+        }
+
+        
+        private Variables Widening(Variables vars1, Variables vars2)
+        {
+            if (vars1 == null) return vars2;
+            var wided = new Variables(vars1);
+            //var list = vars1.Values.ToList();
+            foreach (var kvp in vars2.Values)
+            {
+                Primitive outVal;
+                if (vars1.Values.TryGetValue(kvp.Key, out outVal))
+                {
+                    wided.Values.Remove(kvp.Key);
+                    wided.Values.Add(kvp.Key,WidePrimitives(outVal, kvp.Value));
+                }
+                else
+                {
+                    wided.Values.Add(kvp.Key, kvp.Value);
+                }
+            }
+
+            return wided;
+        }
+
+        private Tuple<Variables, Variables> SplitByCondition(Variables vars, ExpressionSyntax cond)
+        {
+            return new Tuple<Variables, Variables>(vars, vars);
+            //var conditionExpression = cond as BinaryExpressionSyntax;
+            //var unaryExpression = cond as PrefixUnaryExpressionSyntax;
+            //if (conditionExpression != null)
+            //{
+            //    var leftExpr = conditionExpression.Left;
+            //    var rightExpr = conditionExpression.Right;
+            //    switch (conditionExpression.Kind())
+            //    {
+            //        case SyntaxKind.EqualsExpression:
+            //            throw new Exception("unsupported type on binary condition");
+            //        case SyntaxKind.LessThanExpression:
+            //            throw new Exception("unsupported type on binary condition");
+            //        case SyntaxKind.LessThanOrEqualExpression:
+            //            throw new Exception("unsupported type on binary condition");
+            //        case SyntaxKind.GreaterThanExpression:
+            //            throw new Exception("unsupported type on binary condition");
+            //        case SyntaxKind.GreaterThanOrEqualExpression:
+            //            throw new Exception("unsupported type on binary condition");
+            //        case SyntaxKind.LogicalAndExpression:
+            //            throw new Exception("unsupported type on binary condition");
+            //        case SyntaxKind.LogicalOrExpression:
+            //            throw new Exception("unsupported type on binary condition");
+            //        default: throw new Exception("unsupported type on binary condition");
+
+            //    }
+            //}
+            //else if (unaryExpression != null)
+            //{
+            //    switch (unaryExpression.Kind())
+            //    {
+            //        case SyntaxKind.LogicalNotExpression:
+            //            throw new Exception("unsupported type on unary condition");
+            //        default:
+            //            throw new Exception("unsupported type on unary condition");
+            //    }
+            //}
+            //else
+            //{
+            //    throw new Exception("unsupported type on condition");
+            //}
+            //// todo
+            //return new Tuple<Variables, Variables>(vars, vars);
+        }
+
+        private Variables UnionVars(Variables vars1, Variables vars2)
+        {
+            var union = new Variables(vars1);
+            foreach (var pair in vars2.Values)
+            {
+                Primitive value;
+                if (union.Values.TryGetValue(pair.Key, out value))
+                {
+                    union.Values.Remove(pair.Key);
+                    var res = value.Concat(pair.Value);
+                    union.Values.Add(pair.Key, res);
+                }
+                else
+                    union.Values.Add(pair.Key, pair.Value);
+            }
+            return union;
+        }
+
+        private void addToQueue(ControlFlowBasicBlock block , Variables vars,
+            Dictionary<ControlFlowBasicBlock, Variables> blocksInVars,
             Queue<Tuple<ControlFlowBasicBlock, Variables>> blocksToProcess)
         {
             if (blocksInVars.ContainsKey(block))
 
-                blocksInVars[block].Add(vars);
+                blocksInVars[block] = UnionVars(vars, blocksInVars[block]);
+                
             else
             {
-                var list = new List<Variables> {vars};
-                blocksInVars.Add(block, list);
+                blocksInVars.Add(block, vars);
             }
-            if(blocksInVars[block].Count == cfg.InNodes[block].Count)
-            {
-                var union = new Variables(blocksInVars[block][0]);
-                for(var i = 1; i < blocksInVars[block].Count; i++)
-                {
-                    foreach(var pair in blocksInVars[block][i].Values)
-                    {
-                        Primitive value;
-                        if (union.Values.TryGetValue(pair.Key, out value))
-                        {
-                            union.Values.Remove(pair.Key);
-                            var res = value.Concat(pair.Value);
-                            union.Values.Add(pair.Key, res);
-                        }
-                        else
-                            union.Values.Add(pair.Key, pair.Value);
-                    }
-                }
-                blocksToProcess.Enqueue(new Tuple<ControlFlowBasicBlock, Variables>(block, union));
-            }
+            blocksToProcess.Enqueue(new Tuple<ControlFlowBasicBlock, Variables>(block, blocksInVars[block]));
         }
 
         private void CFGWalker(ControlFlowGraph.ControlFlowGraph cfg, Variables vars,
@@ -128,26 +177,29 @@ namespace CSharpAnalyzers
             blocksToProcess.Enqueue(new Tuple<ControlFlowBasicBlock, Variables>(
                 cfg.FirstBlock, vars));
 
-            var blocksInVars = new Dictionary<ControlFlowBasicBlock, List<Variables>>();
+            var blocksInVars = new Dictionary<ControlFlowBasicBlock, Variables>();
 
             while (blocksToProcess.Count != 0)
             {
                 var inr = blocksToProcess.Dequeue();
                 var currentBlock = inr.Item1;
-                var currentBlockVars = inr.Item2;
-                var outVars = new BlockAnalyser(currentBlock, currentBlockVars, semanticModel, ErrorNotifier).Run();
-
+                var currentBlockInVars = inr.Item2;
+                Variables outVars;
+                
+                if (!BlockAnalyser.GetInstance(currentBlock, semanticModel, ErrorNotifier)
+                                  .TryToRun((x,y) => 
+                                            Widening(x,y), currentBlockInVars, out outVars)) continue;
 
                 if (currentBlock.Successor != null)
-                    tryAddToQ(cfg, currentBlock.Successor, outVars, blocksInVars, blocksToProcess);
+                    addToQueue(currentBlock.Successor, outVars, blocksInVars, blocksToProcess);
 
                 var cond = currentBlock.Condition;
                 if (cond == null) continue;
                 var innr = SplitByCondition(outVars, cond);
                 var trueVars = innr.Item1;
                 var falseVars = innr.Item2;
-                tryAddToQ(cfg, currentBlock.TrueSuccessor, trueVars, blocksInVars, blocksToProcess);
-                tryAddToQ(cfg, currentBlock.FalseSuccessor, falseVars, blocksInVars, blocksToProcess);
+                addToQueue(currentBlock.TrueSuccessor, trueVars, blocksInVars, blocksToProcess);
+                addToQueue(currentBlock.FalseSuccessor, falseVars, blocksInVars, blocksToProcess);
             }
         }
 

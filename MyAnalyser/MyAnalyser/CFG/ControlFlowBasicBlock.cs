@@ -10,9 +10,17 @@ namespace CSharpAnalyzers.ControlFlowGraph
         public ControlFlowBasicBlock FalseSuccessor;
         public ControlFlowBasicBlock Successor;
         public ExpressionSyntax Condition;
+        public bool NeedWidening = false;
         public ControlFlowBasicBlock()
         {
             Statements = new List<SyntaxNode>();
+            //TrueSuccessor = null;//new List<ControlFlowBasicBlock>();
+            //FalseSuccessor = new List<ControlFlowBasicBlock>();
+        }
+        public ControlFlowBasicBlock(bool needWidening)
+        {
+            Statements = new List<SyntaxNode>();
+            NeedWidening = needWidening;
             //TrueSuccessor = null;//new List<ControlFlowBasicBlock>();
             //FalseSuccessor = new List<ControlFlowBasicBlock>();
         }

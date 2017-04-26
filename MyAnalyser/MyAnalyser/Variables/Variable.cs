@@ -12,7 +12,7 @@ namespace MyAnalyser.VarStructures
     //    public bool IsArray;
     //    public bool IsNullable;
 
-    //    public Variable(string type)
+    //    public Variable()
     //    {
     //        Type = type;
     //        IsArray = false;
@@ -50,11 +50,9 @@ namespace MyAnalyser.VarStructures
 
     public class Primitive// : Variable
     {
-        public string Type;
         public bool IsArray;
-        public Primitive(string type)// : base(type)
+        public Primitive()// : base()
         {
-            Type = type;
             IsArray = false;
         }
 
@@ -91,11 +89,33 @@ namespace MyAnalyser.VarStructures
             throw new Exception("Error while type casting");
         }
 
+        public override bool Equals(object obj)
+        {
+            var otherPrim = obj as Primitive;
+            if (otherPrim != null)
+            {
+                var val1 = this as PrimitiveValue;
+                var val2 = otherPrim as PrimitiveValue;
+                if (val1 != null && val2 != null)
+                {
+                    return val1.Equals(val2);
+                }
+
+                var arr1 = this as PrimitiveArray;
+                var arr2 = otherPrim as PrimitiveArray;
+                if (arr1 != null && arr2 != null)
+                {
+                    return arr1.Equals(arr2);
+                }
+                return false;
+            }
+            return base.Equals(obj);
+        }
     }
 
     //public class Nullable : Variable
     //{
-    //    public Nullable(string type) : base(type)
+    //    public Nullable() : base()
     //    {
     //        IsNullable = true;
     //    }
@@ -119,26 +139,40 @@ namespace MyAnalyser.VarStructures
 
     public class PrimitiveValue : Primitive
     {
-        public List<Interval<int>> Intervals;
+        public HashSet<Interval> Intervals;
 
-        public PrimitiveValue(string type) : base(type)
+        public int GetLow()
         {
-            Intervals = new List<Interval<int>>{new Interval<int>(0,0)};
+            return Intervals.Min(i => i.Low);
         }
 
-        public PrimitiveValue(string type, List<Interval<int>> values) : base(type)
+        public int GetHigh()
         {
-            Intervals = values;
+            return Intervals.Max(i => i.High);
         }
 
-        public PrimitiveValue(string type, int low, int high) : base(type)
+        public PrimitiveValue() : base()
         {
-            Intervals = new List<Interval<int>>{new Interval<int>(low, high)};
+            Intervals = new HashSet<Interval> {Interval.Get(0, 0)};
+        }
+
+        //public PrimitiveValue( List<Interval> values) : base()
+        //{
+        //    Intervals = values;
+        //}
+
+        public PrimitiveValue( int low, int high) : base()
+        {
+            Intervals = new HashSet<Interval> {Interval.Get(low, high)};
+        }
+        public PrimitiveValue(Interval interval) : base()
+        {
+            Intervals = new HashSet<Interval> { interval };
         }
 
         public PrimitiveValue GetCopy()
         {
-            var x = new PrimitiveValue(Type);
+            var x = new PrimitiveValue();
             foreach (var elem in Intervals)
             {
                 x.Intervals.Add(elem);
@@ -148,10 +182,26 @@ namespace MyAnalyser.VarStructures
 
         public PrimitiveValue Concat(PrimitiveValue otherVar)
         {
-            var x = new PrimitiveValue(Type);
-            x.Intervals = Intervals.Concat(otherVar.Intervals).Distinct().ToList();
-            
+            var x = this.GetCopy();
+            x.Intervals.UnionWith(otherVar.Intervals);
+
             return x;
+        }
+
+        public override bool Equals(object obj)
+        {
+            var otherPrimVal = obj as PrimitiveValue;
+            if (otherPrimVal != null)
+            {
+                var otherIntervals = otherPrimVal.Intervals;
+                if (Intervals.Count != otherIntervals.Count) return false;
+                foreach (var interval in Intervals)
+                {
+                    if (!otherIntervals.Contains(interval)) return false;
+                }
+                return true;
+            }
+            return base.Equals(obj);
         }
     }
 
@@ -159,12 +209,12 @@ namespace MyAnalyser.VarStructures
     {
         public Primitive[] Elements;
 
-        public PrimitiveArray(string type) : base(type)
+        public PrimitiveArray() : base()
         {
             IsArray = true;
         }
 
-        public PrimitiveArray(string type, int length) : base(type)
+        public PrimitiveArray( int length) : base()
         {
             IsArray = true;
             Elements = new Primitive[length];
@@ -172,7 +222,7 @@ namespace MyAnalyser.VarStructures
 
         public PrimitiveArray GetCopy()
         {
-            var x = new PrimitiveArray(Type);
+            var x = new PrimitiveArray();
             x.Elements = new Primitive[Elements.Length];
             for (var i = 0; i < Elements.Length; i++)
             {
@@ -183,25 +233,42 @@ namespace MyAnalyser.VarStructures
 
         public PrimitiveArray Concat(PrimitiveArray otherVar)
         {
-            var x = new PrimitiveArray(Type);
+            var x = GetCopy();
             for (var i = 0; i < Elements.Length; i++)
             {
                 x.Elements[i] = Elements[i].Concat(otherVar.Elements[i]);
             }
             return x;
         }
-    }
+
+        public override bool Equals(object obj)
+        {
+            var otherPrimArr = obj as PrimitiveArray;
+            if (otherPrimArr != null)
+            {
+                var otherElems = otherPrimArr.Elements;
+                if (Elements.Length != otherElems.Length) return false;
+                for (var i = 0; i < Elements.Length; i++)
+                {
+                    if (!otherElems[i].Equals(Elements[i])) return false;
+                }
+                return true;
+            }
+            return base.Equals(obj);
+        }
+
+        }
 
 
     //public class NullableValue : Nullable
     //{
     //    public List<NullableVarValue> Values;
 
-    //    public NullableValue(string type) : base(type)
+    //    public NullableValue() : base()
     //    {
     //    }
 
-    //    public NullableValue(string type, List<NullableVarValue> values) : base(type)
+    //    public NullableValue( List<NullableVarValue> values) : base()
     //    {
     //        Values = values;
     //    }
@@ -221,11 +288,11 @@ namespace MyAnalyser.VarStructures
     //{
     //    public Nullable[] Elements;
 
-    //    public NullableArray(string type) : base(type)
+    //    public NullableArray() : base()
     //    {
     //        IsArray = true;
     //    }
-    //    public NullableArray(string type, int length) : base(type)
+    //    public NullableArray( int length) : base()
     //    {
     //        IsArray = true;
     //        Elements = new Nullable[length];

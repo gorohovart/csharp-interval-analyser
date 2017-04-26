@@ -14,49 +14,84 @@ namespace MyAnalyser
 {
     public class BlockAnalyser
     {
+        private Variables lastInVariables;
         private Variables vars;
-        private ControlFlowBasicBlock block;
-        private SemanticModel semanticModel;
-        private ErrorNotifier errorNotifier;
+        private readonly ControlFlowBasicBlock block;
+        private readonly SemanticModel semanticModel;
+        private readonly ErrorNotifier errorNotifier;
         private static int minValue = Int32.MinValue;
         private static int maxValue = Int32.MaxValue;
 
-        public BlockAnalyser(ControlFlowBasicBlock block,
-            Variables vars, SemanticModel semanticModel, ErrorNotifier errorNotifier)
+        private static Dictionary<ControlFlowBasicBlock, BlockAnalyser> instanceHolder = new Dictionary<ControlFlowBasicBlock, BlockAnalyser>();
+
+        private BlockAnalyser(ControlFlowBasicBlock block,
+            SemanticModel semanticModel, ErrorNotifier errorNotifier)
         {
-            this.vars = new Variables(vars);
             this.semanticModel = semanticModel;
             this.block = block;
             this.errorNotifier = errorNotifier;
         }
 
-        public Variables Run()
+        public static BlockAnalyser GetInstance(ControlFlowBasicBlock block, SemanticModel semanticModel,
+            ErrorNotifier errorNotifier)
         {
+            BlockAnalyser current;
+            if (instanceHolder.TryGetValue(block, out current))
+            {
+                return current;
+            }
+            current = new BlockAnalyser(block, semanticModel, errorNotifier);
+            instanceHolder.Add(block,current);
+            return current;
+        }
+
+        public bool TryToRun(Func<Variables, Variables, Variables> Widening, Variables newVars, out Variables outVariables)
+        {
+            var newVarsWided = block.NeedWidening ? Widening(lastInVariables, newVars) : newVars; 
+            if (newVarsWided.Equals(lastInVariables))
+            {
+                outVariables = null;
+                return false;
+            }
+            this.lastInVariables = newVarsWided;
+            this.vars = new Variables(newVarsWided);
+            
             foreach (var statement in block.Statements)
             {
                 if (statement.IsKind(SyntaxKind.LocalDeclarationStatement))
                 {
-                    var variableDecl = (LocalDeclarationStatementSyntax)statement;
-                    DeclarationStatement(variableDecl);
+                    var localDecl = (LocalDeclarationStatementSyntax)statement;
+                    var variableDecl = localDecl.Declaration;
+                    VariableDeclrnStatement(variableDecl);
                 }
+                else if (statement.IsKind(SyntaxKind.VariableDeclaration))
+                {
+                    var variableDecl = (VariableDeclarationSyntax)statement;
+                    VariableDeclrnStatement(variableDecl);
+                }
+                else if (statement.IsKind(SyntaxKind.ReturnStatement))
+                    ReturnStatement((ReturnStatementSyntax)statement);
                 else if (statement.IsKind(SyntaxKind.ExpressionStatement))
                 {
                     var exprStmt = (ExpressionStatementSyntax)statement;
                     var expr = exprStmt.Expression;
                     StatementExpression(expr);
                 }
-                else if (statement.IsKind(SyntaxKind.ReturnStatement))
-                    ReturnStatement((ReturnStatementSyntax)statement);
+                else if (statement is ExpressionSyntax)
+                {
+                    StatementExpression((ExpressionSyntax)statement);
+                }
                 else
                     throw new Exception("todo unsupported type of expression");
             }
 
-            return vars;
+            outVariables = vars;
+            return true;
         }
 
         private static bool TryGetType(Type type, string typeName, out string outType, out bool isArray)
         {
-            string[] alowedTypes = { "int" };
+            string[] alowedTypes = { "int", "int[]", "int[][]" };
             isArray = type.GetTypeInfo().IsArray;
             //var typeInfo = type.GetTypeInfo();
             //if (type.GetTypeInfo().IsPrimitive)
@@ -87,7 +122,7 @@ namespace MyAnalyser
             }
         }
 
-        private int[] Op(Func<int, int, int> op, Func<int, int, int> getVal, Interval<int> left, Interval<int> right, Location location)
+        private int[] Op(Func<int, int, int> op, Func<int, int, int> getVal, Interval left, Interval right, Location location)
         {
             var x = new[]
             {
@@ -102,29 +137,29 @@ namespace MyAnalyser
         private PrimitiveValue BinaryOp(PrimitiveValue left, PrimitiveValue right, SyntaxToken op)
         {
             var location = op.GetLocation();
-            var result = new PrimitiveValue("");
+            var result = new PrimitiveValue();
             foreach (var leftInterval in left.Intervals)
                 foreach (var rightInterval in right.Intervals)
                 {
                     
                     int[] G;
                     int minG, maxG;
-                    if (op.Text == "+" || op.Text == "+=")
+                    if (op.Text == "+" || op.Text == "+=" || op.Text == "++")
                     {
                         G = Op((x, y) => checked(x + y), (x, y) => x > 0 ? maxValue : minValue, leftInterval, rightInterval, location);
                     }
-                    else if (op.Text == "-" || op.Text == "-=")
+                    else if (op.Text == "-" || op.Text == "-=" || op.Text == "--")
                     {
                         G = Op((x, y) => checked(x - y), (x, y) => x > 0 ? minValue : maxValue, leftInterval, rightInterval, location);
                     }
                     else if (op.Text == "/" || op.Text == "/=")
                     {
                         throw new Exception("unsupported division");
-                        //G = Op((x, y) => x - y, (x, y) => x > 0 ? minValue : maxValue, leftInterval, rightInterval, location);
+                        //G = Op((x, y) => x / y, (x, y) => x > 0 ? minValue : maxValue, leftInterval, rightInterval, location);
                     }
                     else if (op.Text == "*" || op.Text == "*=")
                     {
-                        G = Op((x, y) => checked(x / y), (x, y) => x > 0 ? (y > 0? maxValue : minValue): (y > 0 ? minValue : maxValue), leftInterval, rightInterval, location);
+                        G = Op((x, y) => checked(x * y), (x, y) => x > 0 ? (y > 0? maxValue : minValue): (y > 0 ? minValue : maxValue), leftInterval, rightInterval, location);
                     }
                     else
                     {
@@ -133,7 +168,7 @@ namespace MyAnalyser
                     minG = G.Min();
                     maxG = G.Max();
 
-                    result.Intervals.Add(new Interval<int>(Math.Max(minG, minValue), Math.Min(maxG, maxValue)));
+                    result.Intervals.Add(Interval.Get(Math.Max(minG, minValue), Math.Min(maxG, maxValue)));
                     
                 }
             return result;
@@ -153,7 +188,8 @@ namespace MyAnalyser
             var invocationExpression = expr as InvocationExpressionSyntax;
             var literal = expr as LiteralExpressionSyntax;
             var identifierName = expr as IdentifierNameSyntax;
-            var initializerExpression = expr as InitializerExpressionSyntax;
+            var implictArrayCreationExpression = expr as ImplicitArrayCreationExpressionSyntax;
+            var arrayCreationExpression = expr as ArrayCreationExpressionSyntax;
             Primitive result;
             if (condExpr != null)
             {
@@ -168,7 +204,7 @@ namespace MyAnalyser
             }
             else if (invocationExpression != null)
             {
-                result = new PrimitiveValue("") { Intervals = new List<Interval<int>> { new Interval<int>(minValue, maxValue) } };
+                result = new PrimitiveValue(minValue, maxValue);
             }
             else if (literal != null)
             {
@@ -182,25 +218,47 @@ namespace MyAnalyser
                     value = maxValue;
                 }
                 
-                result = new PrimitiveValue("") { Intervals = new List<Interval<int>> { new Interval<int>(value, value) } };
+                result = new PrimitiveValue(value, value);
             }
             else if (identifierName != null)
             {
                 var identName = identifierName.Identifier.Text;
                 result = vars.Values[identName];
             }
-            else if (initializerExpression != null)
+            else if (implictArrayCreationExpression != null)
             {
-                var lengthOfArray = initializerExpression.Expressions.Count;
-                var elemsOfArray = initializerExpression.Expressions;
+                if (implictArrayCreationExpression.Initializer != null)
+                {
+                    var lengthOfArray = implictArrayCreationExpression.Initializer.Expressions.Count;
+                    var elemsOfArray = implictArrayCreationExpression.Initializer.Expressions;
 
-                result = new PrimitiveArray("", lengthOfArray);
+                    result = new PrimitiveArray(lengthOfArray);
+                    for (var i = 0; i < lengthOfArray; i++)
+                    {
+                        var value = VariableInitializer(elemsOfArray[i]);
+                        ((PrimitiveArray) result).Elements[i] = value;
+                    }
+                }
+                else
+                {
+                    throw new Exception("Impossible");
+                }
+            }/*
+            else if (arrayCreationExpression != null)
+            {
+                //result = Expression(arrayCreationExpression.Initializer);
+                var lengthOfArray = arrayCreationExpression.Type.RankSpecifiers[0]; /// rankSpecifiers : [...], [...], [...]
+                var elemsOfArray = implictArrayCreationExpression.Initializer.Expressions;
+
+                var posibleLengths = lengthOfArray.Sizes; /// sizes: [..., ..., ...]
+                result = new PrimitiveArray(lengthOfArray);
+                var current = 
                 for (var i = 0; i < lengthOfArray; i++)
                 {
                     var value = VariableInitializer(elemsOfArray[i]);
                     ((PrimitiveArray)result).Elements[i] = value;
                 }
-            }
+            }*/
             else
                 throw new Exception("todo: unsupported expression type");
             return result;
@@ -214,6 +272,7 @@ namespace MyAnalyser
             vars.Values.TryGetValue(arrayName, out var);
 
             PrimitiveArray checkedArray = (PrimitiveArray)var;
+            if (checkedArray == null) throw new Exception("Got not an array from array variable");
             for (var i = 0; i < args.Count; i++)
             {
                 var length = checkedArray.Elements.Length;
@@ -223,7 +282,7 @@ namespace MyAnalyser
                     var isInBounds = (interval.Low >= 0) && (interval.Low <= length) && (interval.High >= 0) && (interval.High <= length);
                     if (!isInBounds)
                     {
-                        errorNotifier.AddOutOfArrayBounds(args[i].Expression.GetLocation());
+                        errorNotifier.AddOutOfArrayBounds(args[i].GetLocation());
                     }
                 }
                 if (i+1 < args.Count)
@@ -272,13 +331,30 @@ namespace MyAnalyser
             {
                 // todo: check out params
             }
-            else if (postUnaryExpr != null)
+            else if (postUnaryExpr != null || preUnaryExpr != null)
             {
-                throw new Exception("todo unsupported postUnary expression");
-            }
-            else if (preUnaryExpr != null)
-            {
-                throw new Exception("todo unsupported preUnary expression");
+                var x = postUnaryExpr == null ? preUnaryExpr.Operand : postUnaryExpr.Operand;
+                var operatorToken = postUnaryExpr == null ? preUnaryExpr.OperatorToken : postUnaryExpr.OperatorToken;
+                var one = new PrimitiveValue(1,1);
+                //postUnaryExpr.Operand;
+                if (x.IsKind(SyntaxKind.IdentifierName))
+                {
+                    var varName = ((IdentifierNameSyntax)x).Identifier.Text;
+                    var result = AssignmentOperatorHandler(vars.Values[varName], one, operatorToken);
+                    vars.Values.Remove(varName);
+                    vars.Values.Add(varName, result);
+                }
+                else if (x.IsKind(SyntaxKind.ElementAccessExpression))
+                {
+                    var elementAccess = (ElementAccessExpressionSyntax)x;
+                    var arrayName = ((IdentifierNameSyntax)elementAccess.Expression).Identifier.Text;
+                    var args = elementAccess.ArgumentList.Arguments;
+                    var accessedArray = ErrorsCheck(arrayName, args);
+                    var result = AssignmentOperatorHandler(accessedArray.Elements[0], one, operatorToken);
+                    accessedArray.Elements[0] = result;
+                }
+                else
+                    throw new Exception("Unsupported postDecrement expression");
             }
             else if (objCreationExpr != null)
             {
@@ -296,7 +372,7 @@ namespace MyAnalyser
                 var lengthOfArray = initializerExpression.Expressions.Count;
                 var elemsOfArray = initializerExpression.Expressions;
 
-                newVar = new PrimitiveArray("", lengthOfArray);
+                newVar = new PrimitiveArray(lengthOfArray);
                 for (var i = 0; i < lengthOfArray; i++)
                 {
                     var value = VariableInitializer(elemsOfArray[i]);
@@ -310,17 +386,17 @@ namespace MyAnalyser
             return newVar;
         }
 
-        private void DeclarationStatement(LocalDeclarationStatementSyntax declaration)
+        private void VariableDeclrnStatement(VariableDeclarationSyntax variableDecl)
         {
-            var variableDecl = declaration.Declaration;
-            var modifiers = declaration.Modifiers;
+            //var variableDecl = declaration.Declaration;
+            //var modifiers = declaration.Modifiers;
             var typeOfVars = semanticModel.GetSymbolInfo(variableDecl.Type);
             var nameOfType = typeOfVars.Symbol.ToString();
 
             //VariablesList.Add(new Tuple<string, Location>(nameOfType, variableDecl.GetLocation()));
             //printfn "Type: %s" nameOfType
             //if (nameOfType != "int" && nameOfType != "Int32") break;
-            bool isConst = modifiers.Select(x => x.Text).Contains("const");
+            //bool isConst = modifiers.Select(x => x.Text).Contains("const");
             string outName;
             bool isArray;
             if (!TryGetType(typeOfVars.GetType(), nameOfType, out outName, out isArray)) return;
@@ -338,11 +414,11 @@ namespace MyAnalyser
                 }
                 else if (isArray)
                 {
-                    newVar = new PrimitiveArray(nameOfType);
+                    newVar = new PrimitiveArray();
                 }
                 else
                 {
-                    newVar = new PrimitiveValue(nameOfType);
+                    newVar = new PrimitiveValue();
                 }
                 vars.Values.Add(varName, newVar);
             }

@@ -130,6 +130,17 @@ namespace CSharpAnalyzers.ControlFlowGraph
                 //SyntaxKind.NotEqualsExpression,
                 //SyntaxKind.IfStatement
             }.ToImmutableHashSet();
+            private readonly ImmutableHashSet<SyntaxKind> supportedLoopKinds = new[]
+            {
+                //SyntaxKind.VariableDeclaration,
+                SyntaxKind.WhileStatement,
+                SyntaxKind.ForEachStatement,
+                SyntaxKind.ForStatement,
+                SyntaxKind.DoStatement
+                //SyntaxKind.EqualsExpression,
+                //SyntaxKind.NotEqualsExpression,
+                //SyntaxKind.IfStatement
+            }.ToImmutableHashSet();
 
             public ControlFlowBasicBlock FirstBlock;
             private ControlFlowBasicBlock currentBasicBlock;
@@ -189,11 +200,104 @@ namespace CSharpAnalyzers.ControlFlowGraph
                         conditionBasicBlock.TrueSuccessor = ifTrueBasicBlock;
                         
                     }
+                    else if (supportedLoopKinds.Contains(node.Kind()))
+                    {
+                        LoopProcesser(node);
+                    }
                     else
                     {
                         base.Visit(node);
                     }
                 }
+            }
+
+            private void LoopProcesser(SyntaxNode node)
+            {
+                var basicBlock = currentBasicBlock;
+                var statementBasicBlock = new ControlFlowBasicBlock(true);
+                var afterLoopBasicBlock = new ControlFlowBasicBlock();
+
+                basicBlock.Terminator = node;
+                if (node.IsKind(SyntaxKind.WhileStatement))
+                {
+                    var whileSt = (WhileStatementSyntax) node;
+                    var condition = whileSt.Condition;
+                    var statement = whileSt.Statement;
+
+                    basicBlock.Condition = condition;
+                    basicBlock.TrueSuccessor = statementBasicBlock;
+                    basicBlock.FalseSuccessor = afterLoopBasicBlock;
+
+                    SetCurrentBasicBlock(statementBasicBlock);
+                    Visit(statement);
+
+                    currentBasicBlock.Condition = condition;
+                    currentBasicBlock.TrueSuccessor = statementBasicBlock;
+                    currentBasicBlock.FalseSuccessor = afterLoopBasicBlock;
+                }
+                else if (node.IsKind(SyntaxKind.DoStatement))
+                {
+                    var doSt = (DoStatementSyntax)node;
+                    var condition = doSt.Condition;
+                    var statement = doSt.Statement;
+
+                    basicBlock.Successor = statementBasicBlock;
+
+                    SetCurrentBasicBlock(statementBasicBlock);
+                    Visit(statement);
+
+                    currentBasicBlock.Condition = condition;
+                    currentBasicBlock.TrueSuccessor = statementBasicBlock;
+                    currentBasicBlock.FalseSuccessor = afterLoopBasicBlock;
+                }
+                else if (node.IsKind(SyntaxKind.ForEachStatement))
+                {
+                    throw new Exception("Foreach loop is unsupported");
+                    //var foreachSt = (ForEachStatementSyntax)node;
+                    //var collectionExpression = foreachSt.Expression;
+                    //var statement = foreachSt.Statement;
+                    //// тут логика с тем что надо быть в границах коллекции
+                    //basicBlock.Condition = expression;
+                    //basicBlock.TrueSuccessor = statementBasicBlock;
+                    //basicBlock.FalseSuccessor = afterLoopBasicBlock;
+
+                    //SetCurrentBasicBlock(statementBasicBlock);
+                    //Visit(statement);
+
+                    //currentBasicBlock.Condition = condition;
+                    //currentBasicBlock.TrueSuccessor = statementBasicBlock;
+                    //currentBasicBlock.FalseSuccessor = afterLoopBasicBlock;
+                }
+                else if(node.IsKind(SyntaxKind.ForStatement))
+                {
+                    var forSt = (ForStatementSyntax)node;
+                    var condition = forSt.Condition;
+                    var declaration = forSt.Declaration;
+                    var incrementors = forSt.Incrementors;
+                    var statement = forSt.Statement;
+
+                    var declarationBlock = new ControlFlowBasicBlock();
+
+                    basicBlock.Successor = declarationBlock;
+                    declarationBlock.Statements.Add(declaration);
+                    declarationBlock.Condition = condition;
+                    declarationBlock.TrueSuccessor = statementBasicBlock;
+                    declarationBlock.FalseSuccessor = afterLoopBasicBlock;
+
+                    SetCurrentBasicBlock(statementBasicBlock);
+                    Visit(statement);
+
+                    var incrementorsBlock = new ControlFlowBasicBlock();
+                    currentBasicBlock.Successor = incrementorsBlock;
+                    foreach (var incrementor in incrementors)
+                    {
+                        incrementorsBlock.Statements.Add(incrementor);
+                    }
+                    incrementorsBlock.Condition = condition;
+                    incrementorsBlock.TrueSuccessor = statementBasicBlock;
+                    incrementorsBlock.FalseSuccessor = afterLoopBasicBlock;
+                }
+                SetCurrentBasicBlock(afterLoopBasicBlock);
             }
 
             private void SetCurrentBasicBlock(ControlFlowBasicBlock newCurrentBasicBlock)
