@@ -120,6 +120,10 @@ namespace MyAnalyser
                 errorNotifier.AddTypeOwerflow(location);
                 return getVal(left, right);
             }
+            catch (System.DivideByZeroException e)
+            {
+                return 0;
+            }
         }
 
         private int[] Op(Func<int, int, int> op, Func<int, int, int> getVal, Interval left, Interval right, Location location)
@@ -154,8 +158,10 @@ namespace MyAnalyser
                     }
                     else if (op.Text == "/" || op.Text == "/=")
                     {
-                        throw new Exception("unsupported division");
-                        //G = Op((x, y) => x / y, (x, y) => x > 0 ? minValue : maxValue, leftInterval, rightInterval, location);
+                        //throw new Exception("unsupported division");
+                        if (rightInterval.Low <= 0 && 0 <= rightInterval.High)
+                            errorNotifier.AddDevisionByZero(location);
+                        G = Op((x, y) => x / y, (x, y) => x > 0 ? minValue : maxValue, leftInterval, rightInterval, location);
                     }
                     else if (op.Text == "*" || op.Text == "*=")
                     {

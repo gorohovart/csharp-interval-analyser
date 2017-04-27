@@ -43,8 +43,17 @@ namespace CSharpAnalyzers
 
         private Interval WideIntervals(Interval interval1, Interval interval2)
         {
-            return Interval.Get(interval2.Low < interval1.Low ? Int32.MinValue : interval1.Low,
-                interval2.High > interval1.High ? Int32.MaxValue : interval1.High);
+            const int k = 100; // -k to k
+
+            var x1 =
+                interval1.Low <= interval2.Low
+                    ? interval1.Low
+                    : interval2.Low >= -1 * k ? interval2.Low : Int32.MinValue;
+            var x2 =
+                interval1.High >= interval2.High
+                    ? interval1.High
+                    : interval2.High <= k ? interval2.High : Int32.MaxValue;
+            return Interval.Get(x1,x2);
         }
 
         private Primitive WidePrimitives(Primitive prim1, Primitive prim2)
@@ -54,7 +63,7 @@ namespace CSharpAnalyzers
             if (value1 != null && value2 != null)
             {
                 var interval1 = Interval.Get(value1.GetLow(), value1.GetHigh());
-                var interval2 = Interval.Get(value1.GetLow(), value1.GetHigh());
+                var interval2 = Interval.Get(value2.GetLow(), value2.GetHigh());
 
                 return new PrimitiveValue(WideIntervals(interval1, interval2));
             }
@@ -205,10 +214,13 @@ namespace CSharpAnalyzers
 
         public void ShowErrors(CodeBlockAnalysisContext context)
         {
-            foreach (var error in ErrorNotifier.Errors.Values)
+           foreach (var errors in ErrorNotifier.Errors.Values)
             {
-                var diagnostic = Diagnostic.Create(Rule, error.Location, error.Text);
-                context.ReportDiagnostic(diagnostic);
+                foreach (var error in errors)
+                {
+                    var diagnostic = Diagnostic.Create(Rule, error.Location, error.Text, error.Text);
+                    context.ReportDiagnostic(diagnostic);
+                }
             }
         }
     }

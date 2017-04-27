@@ -134,7 +134,7 @@ namespace MyAnalyser {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to Possible type owerflow..
+        ///   Looks up a localized string similar to {0}.
         /// </summary>
         internal static string TypeOwerflowMessageFormat {
             get {

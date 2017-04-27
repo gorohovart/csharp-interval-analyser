@@ -151,7 +151,7 @@
   </data>
 
   <data name="TypeOwerflowMessageFormat" xml:space="preserve">
-    <value>Possible type owerflow.</value>
+    <value>{0}</value>
     <comment>The format-able message the diagnostic displays.</comment>
   </data>
 </root>
