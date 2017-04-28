@@ -21,7 +21,7 @@ namespace CSharpAnalyzers
         private readonly DiagnosticDescriptor Rule;
 
         public ErrorNotifier ErrorNotifier = new ErrorNotifier();
-
+        //IFieldSymbol
         public MethodAnalyser(IMethodSymbol node, SyntaxNode root, SemanticModel model, DiagnosticDescriptor rule)
         {
             Rule = rule;
@@ -32,6 +32,47 @@ namespace CSharpAnalyzers
                 var paramName = parameter.Name;
                 if (paramType.ToString() == "int")
                     vars.Values.Add(paramName, new PrimitiveValue(minValue, maxValue));
+            }
+
+            var parent = root.Parent;
+            var fields = parent.DescendantNodes().OfType<FieldDeclarationSyntax>();
+            foreach (var field in fields)
+            {
+                var fieldType = field.Declaration.Type;
+                var variables = field.Declaration.Variables;
+                var typeOfVars = model.GetSymbolInfo(fieldType);
+                var nameOfType = typeOfVars.Symbol.ToString();
+
+                //VariablesList.Add(new Tuple<string, Location>(nameOfType, variableDecl.GetLocation()));
+                //printfn "Type: %s" nameOfType
+                //if (nameOfType != "int" && nameOfType != "Int32") break;
+                //bool isConst = modifiers.Select(x => x.Text).Contains("const");
+                string outName;
+                bool isArray;
+                string[] alowedTypes = { "int", "uint",
+                                         "short", "ushort",
+                                         "long", "ulong",
+                                         "sbyte"};
+                isArray = typeOfVars.GetType().GetTypeInfo().IsArray;
+                if (!alowedTypes.Contains(nameOfType)) continue;
+                //outName = nameOfType;
+                foreach (var variableDeclarator in variables)
+                {
+                    var varName = variableDeclarator.Identifier.Text;
+                    if (vars.Values.ContainsKey(varName))
+                        throw new Exception("Declaration of already declared variable");
+
+                    Primitive newVar;
+                    if (isArray)
+                    {
+                        newVar = new PrimitiveArray();
+                    }
+                    else
+                    {
+                        newVar = new PrimitiveValue();
+                    }
+                    vars.Values.Add(varName, newVar);
+                }
             }
 
             //let cfg = blockWalker node.Body vars     

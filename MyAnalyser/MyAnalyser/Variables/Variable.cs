@@ -208,7 +208,7 @@ namespace MyAnalyser.VarStructures
     public class PrimitiveArray : Primitive
     {
         public Primitive[] Elements;
-
+        public Interval Length;
         public PrimitiveArray() : base()
         {
             IsArray = true;

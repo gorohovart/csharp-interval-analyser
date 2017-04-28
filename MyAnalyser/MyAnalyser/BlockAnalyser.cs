@@ -229,7 +229,10 @@ namespace MyAnalyser
             else if (identifierName != null)
             {
                 var identName = identifierName.Identifier.Text;
-                result = vars.Values[identName];
+                //if (vars.Values.ContainsKey(identName))
+                    result = vars.Values[identName];
+                //else
+                //    result = ;
             }
             else if (implictArrayCreationExpression != null)
             {
@@ -432,7 +435,9 @@ namespace MyAnalyser
 
         private void ReturnStatement(ReturnStatementSyntax expr)
         {
-            throw new Exception("todo unsupported RETURN expression");
+            if (expr.Expression != null)
+                Expression(expr.Expression);
+            //throw new Exception("todo unsupported RETURN expression");
         }
     }
 }

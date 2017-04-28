@@ -42,7 +42,9 @@ namespace MyAnalyser
                 //{
                 //    return;
                 //}
+                
                 var rootOfBlock = startCodeBlockContext.CodeBlock;
+                
 
                 var x = new MethodAnalyser(method, rootOfBlock, startCodeBlockContext.SemanticModel, Rule);
                 startCodeBlockContext.RegisterCodeBlockEndAction(x.ShowErrors);

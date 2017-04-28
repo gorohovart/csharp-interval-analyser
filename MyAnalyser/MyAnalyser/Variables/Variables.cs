@@ -12,6 +12,8 @@ namespace MyAnalyser.VarStructures
             
         }
 
+        //public Primitive Get()
+
         public Variables(Variables oldVariables)
         {
             Values = new Dictionary<string, Primitive>();
