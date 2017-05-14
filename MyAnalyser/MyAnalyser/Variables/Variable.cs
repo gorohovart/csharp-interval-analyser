@@ -141,12 +141,12 @@ namespace MyAnalyser.VarStructures
     {
         public HashSet<Interval> Intervals;
 
-        public int GetLow()
+        public long GetLow()
         {
             return Intervals.Min(i => i.Low);
         }
 
-        public int GetHigh()
+        public long GetHigh()
         {
             return Intervals.Max(i => i.High);
         }
@@ -161,13 +161,17 @@ namespace MyAnalyser.VarStructures
         //    Intervals = values;
         //}
 
-        public PrimitiveValue( int low, int high) : base()
+        public PrimitiveValue( long low, long high) : base()
         {
             Intervals = new HashSet<Interval> {Interval.Get(low, high)};
         }
         public PrimitiveValue(Interval interval) : base()
         {
             Intervals = new HashSet<Interval> { interval };
+        }
+        public PrimitiveValue(HashSet<Interval> intervals) : base()
+        {
+            Intervals = intervals;
         }
 
         public PrimitiveValue GetCopy()
@@ -214,7 +218,7 @@ namespace MyAnalyser.VarStructures
             IsArray = true;
         }
 
-        public PrimitiveArray( int length) : base()
+        public PrimitiveArray( long length) : base()
         {
             IsArray = true;
             Elements = new Primitive[length];
@@ -292,7 +296,7 @@ namespace MyAnalyser.VarStructures
     //    {
     //        IsArray = true;
     //    }
-    //    public NullableArray( int length) : base()
+    //    public NullableArray( long length) : base()
     //    {
     //        IsArray = true;
     //        Elements = new Nullable[length];

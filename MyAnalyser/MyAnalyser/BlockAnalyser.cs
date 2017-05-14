@@ -19,8 +19,8 @@ namespace MyAnalyser
         private readonly ControlFlowBasicBlock block;
         private readonly SemanticModel semanticModel;
         private readonly ErrorNotifier errorNotifier;
-        private static int minValue = Int32.MinValue;
-        private static int maxValue = Int32.MaxValue;
+        private static long minValue = Int32.MinValue;
+        private static long maxValue = Int32.MaxValue;
 
         private static Dictionary<ControlFlowBasicBlock, BlockAnalyser> instanceHolder = new Dictionary<ControlFlowBasicBlock, BlockAnalyser>();
 
@@ -43,6 +43,13 @@ namespace MyAnalyser
             current = new BlockAnalyser(block, semanticModel, errorNotifier);
             instanceHolder.Add(block,current);
             return current;
+        }
+
+        public static BlockAnalyser GetInstanceForExpr(Variables variables, SemanticModel semanticModel, ErrorNotifier notifier)
+        {
+            var ba = new BlockAnalyser(new ControlFlowBasicBlock(), semanticModel, notifier);
+            ba.vars = variables;
+            return ba;
         }
 
         public bool TryToRun(Func<Variables, Variables, Variables> Widening, Variables newVars, out Variables outVariables)
@@ -91,7 +98,10 @@ namespace MyAnalyser
 
         private static bool TryGetType(Type type, string typeName, out string outType, out bool isArray)
         {
-            string[] alowedTypes = { "int", "int[]", "int[][]" };
+            string[] alowedTypes = { "int", "uint",
+                                     "short", "ushort",
+                                     "long", "ulong",
+                                     "sbyte", "bool"};
             isArray = type.GetTypeInfo().IsArray;
             //var typeInfo = type.GetTypeInfo();
             //if (type.GetTypeInfo().IsPrimitive)
@@ -108,7 +118,7 @@ namespace MyAnalyser
             //return false;
         }
 
-        private int makeOp(Func<int, int, int> op, Func<int, int, int> getVal, int left, int right, Location location)
+        private long makeOp(Func<long, long, long> op, Func<long, long, long> getVal, long left, long right, Location location)
         {
             try
             {
@@ -126,7 +136,9 @@ namespace MyAnalyser
             }
         }
 
-        private int[] Op(Func<int, int, int> op, Func<int, int, int> getVal, Interval left, Interval right, Location location)
+
+
+        private long[] Op(Func<long, long, long> op, Func<long, long, long> getVal, Interval left, Interval right, Location location)
         {
             var x = new[]
             {
@@ -134,6 +146,21 @@ namespace MyAnalyser
                 makeOp(op, getVal, left.High, right.Low, location),
                 makeOp(op, getVal, left.Low, right.High, location),
                 makeOp(op, getVal, left.High, right.High, location)
+            };
+            return x;
+        }
+        private long[] BoolOp(Func<bool, bool, bool> op, Interval left, Interval right)
+        {
+            var ll = left.Low == 0 ? false : true;
+            var lh = left.High == 0 ? false : true;
+            var rl = right.Low == 0 ? false : true;
+            var rh = right.High == 0 ? false : true;
+            var x = new[]
+            {
+                op(ll, rl) ? 1l: 0l,
+                op(lh, rl) ? 1l: 0l,
+                op(ll, rh) ? 1l: 0l,
+                op(lh, rh) ? 1l: 0l
             };
             return x;
         }
@@ -146,8 +173,9 @@ namespace MyAnalyser
                 foreach (var rightInterval in right.Intervals)
                 {
                     
-                    int[] G;
-                    int minG, maxG;
+                    long[] G = new long[4];
+                    bool flag = false;
+                    long minG, maxG;
                     if (op.Text == "+" || op.Text == "+=" || op.Text == "++")
                     {
                         G = Op((x, y) => checked(x + y), (x, y) => x > 0 ? maxValue : minValue, leftInterval, rightInterval, location);
@@ -167,14 +195,77 @@ namespace MyAnalyser
                     {
                         G = Op((x, y) => checked(x * y), (x, y) => x > 0 ? (y > 0? maxValue : minValue): (y > 0 ? minValue : maxValue), leftInterval, rightInterval, location);
                     }
+                    else if (op.Text == "||" || op.Text == "|=")
+                    {
+                        flag = true;
+                        G = BoolOp((x, y) => checked(x || y), leftInterval, rightInterval);
+                    }
+                    else if (op.Text == "&&" || op.Text == "&=")
+                    {
+                        flag = true;
+                        G = BoolOp((x, y) => checked(x && y), leftInterval, rightInterval);
+                    }
+                    else if (op.Text == "==")
+                    {
+                        // true if exist intersection
+                        // false if all - intersection = empty
+                        flag = true;
+                        G = Op((x, y) => checked(x == y) ? 1 : 0,(x,y) => x, leftInterval, rightInterval, location);
+                    }
+                    else if (op.Text == "!=")
+                    {
+                        // false if exist intersection
+                        // true if all - intersection = empty
+                        flag = true;
+                        G = Op((x, y) => checked(x != y) ? 1 : 0, (x,y) => x, leftInterval, rightInterval, location);
+                    }
+                    else if (op.Text == "<=")
+                    {
+                        flag = true;
+                        G = Op((x, y) => checked(x <= y) ? 1 : 0, (x,y) => x, leftInterval, rightInterval, location);
+                    }
+                    else if (op.Text == ">=")
+                    {
+                        flag = true;
+                        G = Op((x, y) => checked(x >= y) ? 1 : 0, (x,y) => x, leftInterval, rightInterval, location);
+                    }
+                    else if (op.Text == ">")
+                    {
+                        flag = true;
+                        G = Op((x, y) => checked(x > y) ? 1 : 0, (x,y) => x, leftInterval, rightInterval, location);
+                    }
+                    else if (op.Text == "<")
+                    {
+                        flag = true;
+                        G = Op((x, y) => checked(x < y) ? 1 : 0, (x, y) => x, leftInterval, rightInterval, location);
+                    }
                     else
                     {
                         throw new Exception("unsupported binary operator");
                     }
-                    minG = G.Min();
-                    maxG = G.Max();
 
-                    result.Intervals.Add(Interval.Get(Math.Max(minG, minValue), Math.Min(maxG, maxValue)));
+                    if (flag)
+                    {
+                        if (G.Contains(1) && G.Contains(0))
+                        {
+                            result.Intervals.Add(Interval.Get(0, 1));
+                        }
+                        else if (G.Contains(1))
+                        {
+                            result.Intervals.Add(Interval.Get(1, 1));
+                        }
+                        else
+                        {
+                            result.Intervals.Add(Interval.Get(0, 0));
+                        }
+                    }
+                    else
+                    {
+                        minG = G.Min();
+                        maxG = G.Max();
+
+                        result.Intervals.Add(Interval.Get(Math.Max(minG, minValue), Math.Min(maxG, maxValue)));
+                    }
                     
                 }
             return result;
@@ -187,7 +278,7 @@ namespace MyAnalyser
         //    var
         //}
 
-        private Primitive Expression(ExpressionSyntax expr)
+        public Primitive Expression(ExpressionSyntax expr)
         {
             var condExpr = expr as ConditionalExpressionSyntax;
             var binExpr = expr as BinaryExpressionSyntax;
@@ -196,6 +287,11 @@ namespace MyAnalyser
             var identifierName = expr as IdentifierNameSyntax;
             var implictArrayCreationExpression = expr as ImplicitArrayCreationExpressionSyntax;
             var arrayCreationExpression = expr as ArrayCreationExpressionSyntax;
+            var parExpr = expr as ParenthesizedExpressionSyntax;
+            var memberAccessExpr = expr as MemberAccessExpressionSyntax;
+            var postUnaryExpr = expr as PostfixUnaryExpressionSyntax;
+            var preUnaryExpr = expr as PrefixUnaryExpressionSyntax;
+            //var objCreationExpr = expr as ObjectCreationExpressionSyntax;
             Primitive result;
             if (condExpr != null)
             {
@@ -205,8 +301,13 @@ namespace MyAnalyser
             {
                 var left = (PrimitiveValue)Expression(binExpr.Left);
                 var right = (PrimitiveValue)Expression(binExpr.Right);
-                var operation = binExpr.OperatorToken;
-                result = BinaryOp(left, right, operation);
+                if (left == null || right == null)
+                    result = null;
+                else
+                {
+                    var operation = binExpr.OperatorToken;
+                    result = BinaryOp(left, right, operation);
+                }
             }
             else if (invocationExpression != null)
             {
@@ -214,25 +315,36 @@ namespace MyAnalyser
             }
             else if (literal != null)
             {
-                int value;
+                long value;
                 try
                 {
-                    value = Int32.Parse(literal.Token.Text);
+                    if (literal.Token.Text == "true" || literal.Token.Text == "false")
+                        value = Boolean.Parse(literal.Token.Text) ? 1 : 0;
+                    else if (literal.Token.Text == "null")
+                    {
+                        value = 0;
+                    }
+                    else if (literal.Token.Text.Contains("\""))
+                    {
+                        value = 0;
+                    }
+                    else
+                        value = Int64.Parse(literal.Token.Text);
                 }
                 catch (OverflowException e)
                 {
                     value = maxValue;
                 }
-                
+
                 result = new PrimitiveValue(value, value);
             }
             else if (identifierName != null)
             {
                 var identName = identifierName.Identifier.Text;
-                //if (vars.Values.ContainsKey(identName))
+                if (vars.Values.ContainsKey(identName))
                     result = vars.Values[identName];
-                //else
-                //    result = ;
+                else
+                    result = new PrimitiveValue(minValue, maxValue);
             }
             else if (implictArrayCreationExpression != null)
             {
@@ -245,14 +357,89 @@ namespace MyAnalyser
                     for (var i = 0; i < lengthOfArray; i++)
                     {
                         var value = VariableInitializer(elemsOfArray[i]);
-                        ((PrimitiveArray) result).Elements[i] = value;
+                        ((PrimitiveArray)result).Elements[i] = value;
                     }
                 }
                 else
                 {
                     throw new Exception("Impossible");
                 }
-            }/*
+            }
+            else if (parExpr != null)
+            {
+                result = Expression(parExpr.Expression);
+            }
+            else if (memberAccessExpr != null)
+            {
+                if (memberAccessExpr.Name.ToString() == "this")
+                {
+                    result = Expression(memberAccessExpr.Expression);
+                }
+                else
+                {
+                    result = new PrimitiveValue(minValue, maxValue);
+                }
+            }
+            else if (postUnaryExpr != null || preUnaryExpr != null)
+            {
+                var x = postUnaryExpr == null ? preUnaryExpr.Operand : postUnaryExpr.Operand;
+                var operatorToken = postUnaryExpr == null ? preUnaryExpr.OperatorToken : postUnaryExpr.OperatorToken;
+                var one = new PrimitiveValue(1, 1);
+                //postUnaryExpr.Operand;
+                if (x.IsKind(SyntaxKind.IdentifierName)&&(operatorToken.Text != "!")&&(operatorToken.Text != "-"))
+                {
+                    var varName = ((IdentifierNameSyntax)x).Identifier.Text;
+                    result = AssignmentOperatorHandler(vars.Values[varName], one, operatorToken);
+                    vars.Values.Remove(varName);
+                    vars.Values.Add(varName, result);
+                }
+                else if (x.IsKind(SyntaxKind.ElementAccessExpression))
+                {
+                    throw new Exception("Unsupported ElementAccessExpression expression");
+                    //var elementAccess = (ElementAccessExpressionSyntax)x;
+                    //var arrayName = ((IdentifierNameSyntax)elementAccess.Expression).Identifier.Text;
+                    //var args = elementAccess.ArgumentList.Arguments;
+                    //var accessedArray = ErrorsCheck(arrayName, args);
+                    //res = AssignmentOperatorHandler(accessedArray.Elements[0], one, operatorToken);
+                    //accessedArray.Elements[0] = res;
+                }
+                else if (operatorToken.Text == "-")
+                {
+                    if (x is LiteralExpressionSyntax)
+                    {
+                        var value = Int64.Parse((x as LiteralExpressionSyntax).Token.Text);
+                        result = new PrimitiveValue(-1 * value, -1 * value);
+                    }
+                    else
+                        throw new Exception("Unsupported postDecrement expression");
+                }
+                else if (operatorToken.Text == "!")
+                {
+                    var res = Expression(x);
+                    if (res == null)
+                        result = null;
+                    else
+                    {
+                        var nRes = res as PrimitiveValue;
+                        var nIntervals = new HashSet<Interval>();
+                        foreach (var interval in nRes.Intervals)
+                        {
+                            if (interval.Low == interval.High)
+                                nIntervals.Add(Interval.Get(interval.Low == 1 ? 0 : 1, interval.High == 1 ? 0 : 1));
+                            else
+                                nIntervals.Add(interval);
+                        }
+                        result = new PrimitiveValue(nIntervals);
+                    }
+                }
+                else
+                    throw new Exception("Unsupported postDecrement expression");
+            }
+            //else if (objCreationExpr != null)
+            //{
+            //    result = new PrimitiveValue(minValue, maxValue);
+            //}
+            /*
             else if (arrayCreationExpression != null)
             {
                 //result = Expression(arrayCreationExpression.Initializer);
@@ -269,7 +456,8 @@ namespace MyAnalyser
                 }
             }*/
             else
-                throw new Exception("todo: unsupported expression type");
+                result = null;
+                //throw new Exception("todo: unsupported expression type");
             return result;
         }
 
@@ -285,7 +473,9 @@ namespace MyAnalyser
             for (var i = 0; i < args.Count; i++)
             {
                 var length = checkedArray.Elements.Length;
-                var accessValues = (PrimitiveValue) Expression(args[i].Expression);
+                var exprRes = Expression(args[i].Expression);
+                if (exprRes == null) throw new Exception();
+                var accessValues = (PrimitiveValue)exprRes;
                 foreach (var interval in accessValues.Intervals)
                 {
                     var isInBounds = (interval.Low >= 0) && (interval.Low <= length) && (interval.High >= 0) && (interval.High <= length);
@@ -318,22 +508,36 @@ namespace MyAnalyser
             if (assignmentExpr != null)
             {
                 var operatorToken = assignmentExpr.OperatorToken;
-                var exprValue = Expression(assignmentExpr.Right);
+                Primitive exprValue;
                 if (assignmentExpr.Left.IsKind(SyntaxKind.IdentifierName))
                 {
                     var varName = ((IdentifierNameSyntax)assignmentExpr.Left).Identifier.Text;
-                    var result = AssignmentOperatorHandler(vars.Values[varName], exprValue, operatorToken);
-                    vars.Values.Remove(varName);
-                    vars.Values.Add(varName, result);
+                    if (vars.Values.ContainsKey(varName))
+                    {
+                        exprValue = Expression(assignmentExpr.Right);
+                        if (exprValue != null)
+                        {
+                            var result = AssignmentOperatorHandler(vars.Values[varName], exprValue, operatorToken);
+                            vars.Values.Remove(varName);
+                            vars.Values.Add(varName, result);
+                        }
+                    }
                 }
                 else if (assignmentExpr.Left.IsKind(SyntaxKind.ElementAccessExpression))
                 {
                     var elementAccess = (ElementAccessExpressionSyntax)assignmentExpr.Left;
                     var arrayName = ((IdentifierNameSyntax)elementAccess.Expression).Identifier.Text;
-                    var args = elementAccess.ArgumentList.Arguments;
-                    var accessedArray = ErrorsCheck(arrayName, args);
-                    var result = AssignmentOperatorHandler(accessedArray.Elements[0], exprValue, operatorToken);
-                    accessedArray.Elements[0] = result;
+                    if (vars.Values.ContainsKey(arrayName))
+                    {
+                        exprValue = Expression(assignmentExpr.Right);
+                        if (exprValue != null)
+                        {
+                            var args = elementAccess.ArgumentList.Arguments;
+                            var accessedArray = ErrorsCheck(arrayName, args);
+                            var result = AssignmentOperatorHandler(accessedArray.Elements[0], exprValue, operatorToken);
+                            accessedArray.Elements[0] = result;
+                        }
+                    }
                 }
             }
             else if (invocationExpr != null)
@@ -362,8 +566,8 @@ namespace MyAnalyser
                     var result = AssignmentOperatorHandler(accessedArray.Elements[0], one, operatorToken);
                     accessedArray.Elements[0] = result;
                 }
-                else
-                    throw new Exception("Unsupported postDecrement expression");
+                //else
+                    //throw new Exception("Unsupported postDecrement expression");
             }
             else if (objCreationExpr != null)
             {

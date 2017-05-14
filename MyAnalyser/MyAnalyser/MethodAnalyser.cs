@@ -52,7 +52,7 @@ namespace CSharpAnalyzers
                 string[] alowedTypes = { "int", "uint",
                                          "short", "ushort",
                                          "long", "ulong",
-                                         "sbyte"};
+                                         "sbyte", "bool"};
                 isArray = typeOfVars.GetType().GetTypeInfo().IsArray;
                 if (!alowedTypes.Contains(nameOfType)) continue;
                 //outName = nameOfType;
@@ -187,6 +187,29 @@ namespace CSharpAnalyzers
             //return new Tuple<Variables, Variables>(vars, vars);
         }
 
+        private void CheckCondition(Variables vars, ExpressionSyntax cond, SemanticModel model)
+        {
+            var res = BlockAnalyser.GetInstanceForExpr(vars,model, ErrorNotifier).Expression(cond);
+            if (res == null) return;
+            var q = res as PrimitiveValue;
+            var trueExist = false;
+            var falseExist = false;
+            foreach (var interval in q.Intervals)
+            {
+                if (interval.High == 0) falseExist = true; else trueExist = true;
+                if (interval.Low == 0) falseExist = true; else trueExist = true;
+            }
+
+            if (!trueExist)
+            {
+                ErrorNotifier.AddAlwaysFalse(cond.GetLocation());
+            }
+            if (!falseExist)
+            {
+                ErrorNotifier.AddAlwaysTrue(cond.GetLocation());
+            }
+        }
+
         private Variables UnionVars(Variables vars1, Variables vars2)
         {
             var union = new Variables(vars1);
@@ -245,6 +268,7 @@ namespace CSharpAnalyzers
 
                 var cond = currentBlock.Condition;
                 if (cond == null) continue;
+                CheckCondition(outVars, cond, semanticModel);
                 var innr = SplitByCondition(outVars, cond);
                 var trueVars = innr.Item1;
                 var falseVars = innr.Item2;

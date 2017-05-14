@@ -63,5 +63,13 @@ namespace MyAnalyser
         {
             AddError(location, "Possible out of bounds.");
         }
+        public void AddAlwaysTrue(Location location)
+        {
+            AddError(location, "Condition is always true.");
+        }
+        public void AddAlwaysFalse(Location location)
+        {
+            AddError(location, "Condition is always false.");
+        }
     }
 }

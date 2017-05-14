@@ -21,8 +21,8 @@ namespace MyAnalyser.VarStructures
 
     public class NumValue : Value
     {
-        public int Value;
-        public NumValue(int v)
+        public long Value;
+        public NumValue(long v)
         {
             Value = v;
         }
@@ -39,20 +39,20 @@ namespace MyAnalyser.VarStructures
 
     public class Interval
     {
-        public int Low { get; }
-        public int High { get; }
+        public long Low { get; }
+        public long High { get; }
+        public string Type { get; }
+        private static Dictionary<long,Dictionary<long,Interval>> instanceHolder = new Dictionary<long, Dictionary<long, Interval>>();
 
-        private static Dictionary<int,Dictionary<int,Interval>> instanceHolder = new Dictionary<int, Dictionary<int, Interval>>();
-
-        private Interval(int low, int high)
+        private Interval(long low, long high)
         {
             Low = low;
             High = high;
         }
 
-        public static Interval Get(int low, int high)
+        public static Interval Get(long low, long high)
         {
-            Dictionary<int, Interval> innerDict;
+            Dictionary<long, Interval> innerDict;
             if (instanceHolder.TryGetValue(low, out innerDict))
             {
                 Interval instance;
@@ -64,7 +64,7 @@ namespace MyAnalyser.VarStructures
                 return instance;
             }
             var newInst = new Interval(low, high);
-            var newInner = new Dictionary<int, Interval> {{high, newInst}};
+            var newInner = new Dictionary<long, Interval> {{high, newInst}};
             instanceHolder.Add(low, newInner);
             return newInst;
         }
@@ -81,10 +81,7 @@ namespace MyAnalyser.VarStructures
 
         public override int GetHashCode()
         {
-            int hash = 23;
-            hash = hash * 31 + Low;
-            hash = hash * 31 + High;
-            return hash;
+            return (int)(Low ^ (High >> 32));
         }
     }
 }

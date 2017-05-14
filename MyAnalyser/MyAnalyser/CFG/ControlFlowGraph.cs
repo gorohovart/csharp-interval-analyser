@@ -134,7 +134,7 @@ namespace CSharpAnalyzers.ControlFlowGraph
             {
                 //SyntaxKind.VariableDeclaration,
                 SyntaxKind.WhileStatement,
-                SyntaxKind.ForEachStatement,
+                //SyntaxKind.ForEachStatement,
                 SyntaxKind.ForStatement,
                 SyntaxKind.DoStatement
                 //SyntaxKind.EqualsExpression,
