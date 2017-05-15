@@ -20,7 +20,8 @@ namespace MyAnalyser.VarStructures
             if (oldVariables.Values == null) return;
             foreach (var pair in oldVariables.Values)
             {
-                Values.Add(pair.Key, pair.Value.GetCopy());
+                var v = pair.Value?.GetCopy();
+                Values.Add(pair.Key, v);
             }
         }
 

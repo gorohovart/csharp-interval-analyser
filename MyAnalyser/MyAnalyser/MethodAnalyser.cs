@@ -19,11 +19,13 @@ namespace CSharpAnalyzers
         private static int minValue = Int32.MinValue;
         private static int maxValue = Int32.MaxValue;
         private readonly DiagnosticDescriptor Rule;
+        //private Location Defaultlocation;
 
         public ErrorNotifier ErrorNotifier = new ErrorNotifier();
         //IFieldSymbol
         public MethodAnalyser(IMethodSymbol node, SyntaxNode root, SemanticModel model, DiagnosticDescriptor rule)
         {
+            //Defaultlocation = Location.None;
             Rule = rule;
             var vars = new Variables();
             foreach (var parameter in node.Parameters)
@@ -41,6 +43,8 @@ namespace CSharpAnalyzers
                 var fieldType = field.Declaration.Type;
                 var variables = field.Declaration.Variables;
                 var typeOfVars = model.GetSymbolInfo(fieldType);
+                var symb = typeOfVars.Symbol;
+                if (symb == null) continue;
                 var nameOfType = typeOfVars.Symbol.ToString();
 
                 //VariablesList.Add(new Tuple<string, Location>(nameOfType, variableDecl.GetLocation()));
@@ -60,7 +64,8 @@ namespace CSharpAnalyzers
                 {
                     var varName = variableDeclarator.Identifier.Text;
                     if (vars.Values.ContainsKey(varName))
-                        throw new Exception("Declaration of already declared variable");
+                        vars.Values.Remove(varName);
+                        //throw new Exception("Declaration of already declared variable");
 
                     Primitive newVar;
                     if (isArray)
@@ -196,8 +201,8 @@ namespace CSharpAnalyzers
             var falseExist = false;
             foreach (var interval in q.Intervals)
             {
-                if (interval.High == 0) falseExist = true; else trueExist = true;
-                if (interval.Low == 0) falseExist = true; else trueExist = true;
+                if (interval.Low <= 0 && 0 <= interval.High) falseExist = true;
+                if (interval.Low <= 1 && 1 <= interval.High) trueExist = true;
             }
 
             if (!trueExist)
@@ -279,14 +284,19 @@ namespace CSharpAnalyzers
 
         public void ShowErrors(CodeBlockAnalysisContext context)
         {
-           foreach (var errors in ErrorNotifier.Errors.Values)
+            //bool flag = false;
+            foreach (var errors in ErrorNotifier.Errors.Values)
             {
                 foreach (var error in errors)
                 {
+                    //flag = true;
                     var diagnostic = Diagnostic.Create(Rule, error.Location, error.Text, error.Text);
                     context.ReportDiagnostic(diagnostic);
                 }
             }
+            //if (!flag) return;
+            //var diagnostic1 = Diagnostic.Create(Rule, Location.None, "no errs", "no errs");
+            //context.ReportDiagnostic(diagnostic1);
         }
     }
 }

@@ -155,6 +155,10 @@ namespace MyAnalyser.VarStructures
         {
             Intervals = new HashSet<Interval> {Interval.Get(0, 0)};
         }
+        public PrimitiveValue(bool v) : base()
+        {
+            Intervals = new HashSet<Interval>();
+        }
 
         //public PrimitiveValue( List<Interval> values) : base()
         //{
@@ -176,7 +180,7 @@ namespace MyAnalyser.VarStructures
 
         public PrimitiveValue GetCopy()
         {
-            var x = new PrimitiveValue();
+            var x = new PrimitiveValue(false);
             foreach (var elem in Intervals)
             {
                 x.Intervals.Add(elem);

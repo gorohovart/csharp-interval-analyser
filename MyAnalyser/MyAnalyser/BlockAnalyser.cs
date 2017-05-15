@@ -88,8 +88,8 @@ namespace MyAnalyser
                 {
                     StatementExpression((ExpressionSyntax)statement);
                 }
-                else
-                    throw new Exception("todo unsupported type of expression");
+                //else
+                //    throw new Exception("todo unsupported type of expression");
             }
 
             outVariables = vars;
@@ -149,125 +149,237 @@ namespace MyAnalyser
             };
             return x;
         }
-        private long[] BoolOp(Func<bool, bool, bool> op, Interval left, Interval right)
+
+        private Interval ToBool(Interval interval)
         {
-            var ll = left.Low == 0 ? false : true;
-            var lh = left.High == 0 ? false : true;
-            var rl = right.Low == 0 ? false : true;
-            var rh = right.High == 0 ? false : true;
+            return Interval.Get(interval.Low <= 0 ? 0 : 1, interval.High >= 1 ? 1 : 0);
+        }
+
+        private long[] BoolOp(Func<bool, bool, bool> op, Interval leftInterval, Interval rightInterval)
+        {
+            var left = ToBool(leftInterval);
+            var right = ToBool(rightInterval); 
+            var ll = left.Low != 0;
+            var lh = left.High != 0;
+            var rl = right.Low != 0;
+            var rh = right.High != 0;
             var x = new[]
             {
-                op(ll, rl) ? 1l: 0l,
-                op(lh, rl) ? 1l: 0l,
-                op(ll, rh) ? 1l: 0l,
-                op(lh, rh) ? 1l: 0l
+                op(ll, rl) ? 1L: 0L,
+                op(lh, rl) ? 1L: 0L,
+                op(ll, rh) ? 1L: 0L,
+                op(lh, rh) ? 1L: 0L
             };
             return x;
         }
-
-        private PrimitiveValue BinaryOp(PrimitiveValue left, PrimitiveValue right, SyntaxToken op)
+        
+        private Interval Intersect(Interval left, Interval right)
         {
-            var location = op.GetLocation();
-            var result = new PrimitiveValue();
-            foreach (var leftInterval in left.Intervals)
-                foreach (var rightInterval in right.Intervals)
+            var x11 = left.Low;
+            var x12 = left.High;
+            var x21 = right.Low;
+            var x22 = right.High;
+
+            if (Math.Min(x11,x12) < Math.Min(x21, x22))
+            { 
+                if (Math.Max(x11,x12) < Math.Min(x21,x22))
                 {
-                    
-                    long[] G = new long[4];
-                    bool flag = false;
-                    long minG, maxG;
-                    if (op.Text == "+" || op.Text == "+=" || op.Text == "++")
-                    {
-                        G = Op((x, y) => checked(x + y), (x, y) => x > 0 ? maxValue : minValue, leftInterval, rightInterval, location);
-                    }
-                    else if (op.Text == "-" || op.Text == "-=" || op.Text == "--")
-                    {
-                        G = Op((x, y) => checked(x - y), (x, y) => x > 0 ? minValue : maxValue, leftInterval, rightInterval, location);
-                    }
-                    else if (op.Text == "/" || op.Text == "/=")
-                    {
-                        //throw new Exception("unsupported division");
-                        if (rightInterval.Low <= 0 && 0 <= rightInterval.High)
-                            errorNotifier.AddDevisionByZero(location);
-                        G = Op((x, y) => x / y, (x, y) => x > 0 ? minValue : maxValue, leftInterval, rightInterval, location);
-                    }
-                    else if (op.Text == "*" || op.Text == "*=")
-                    {
-                        G = Op((x, y) => checked(x * y), (x, y) => x > 0 ? (y > 0? maxValue : minValue): (y > 0 ? minValue : maxValue), leftInterval, rightInterval, location);
-                    }
-                    else if (op.Text == "||" || op.Text == "|=")
-                    {
-                        flag = true;
-                        G = BoolOp((x, y) => checked(x || y), leftInterval, rightInterval);
-                    }
-                    else if (op.Text == "&&" || op.Text == "&=")
-                    {
-                        flag = true;
-                        G = BoolOp((x, y) => checked(x && y), leftInterval, rightInterval);
-                    }
-                    else if (op.Text == "==")
-                    {
-                        // true if exist intersection
-                        // false if all - intersection = empty
-                        flag = true;
-                        G = Op((x, y) => checked(x == y) ? 1 : 0,(x,y) => x, leftInterval, rightInterval, location);
-                    }
-                    else if (op.Text == "!=")
-                    {
-                        // false if exist intersection
-                        // true if all - intersection = empty
-                        flag = true;
-                        G = Op((x, y) => checked(x != y) ? 1 : 0, (x,y) => x, leftInterval, rightInterval, location);
-                    }
-                    else if (op.Text == "<=")
-                    {
-                        flag = true;
-                        G = Op((x, y) => checked(x <= y) ? 1 : 0, (x,y) => x, leftInterval, rightInterval, location);
-                    }
-                    else if (op.Text == ">=")
-                    {
-                        flag = true;
-                        G = Op((x, y) => checked(x >= y) ? 1 : 0, (x,y) => x, leftInterval, rightInterval, location);
-                    }
-                    else if (op.Text == ">")
-                    {
-                        flag = true;
-                        G = Op((x, y) => checked(x > y) ? 1 : 0, (x,y) => x, leftInterval, rightInterval, location);
-                    }
-                    else if (op.Text == "<")
-                    {
-                        flag = true;
-                        G = Op((x, y) => checked(x < y) ? 1 : 0, (x, y) => x, leftInterval, rightInterval, location);
-                    }
-                    else
-                    {
-                        throw new Exception("unsupported binary operator");
-                    }
-
-                    if (flag)
-                    {
-                        if (G.Contains(1) && G.Contains(0))
-                        {
-                            result.Intervals.Add(Interval.Get(0, 1));
-                        }
-                        else if (G.Contains(1))
-                        {
-                            result.Intervals.Add(Interval.Get(1, 1));
-                        }
-                        else
-                        {
-                            result.Intervals.Add(Interval.Get(0, 0));
-                        }
-                    }
-                    else
-                    {
-                        minG = G.Min();
-                        maxG = G.Max();
-
-                        result.Intervals.Add(Interval.Get(Math.Max(minG, minValue), Math.Min(maxG, maxValue)));
-                    }
-                    
+                    return null;
                 }
+                else if (Math.Max(x11,x12) == Math.Min(x21,x22))
+                    return Interval.Get(Math.Max(x11,x12), Math.Max(x11, x12));
+                else if (Math.Max(x11, x12) > Math.Max(x21, x22))
+                    return Interval.Get(x21, x22);
+                else return Interval.Get(Math.Min(x21, x22), Math.Max(x11, x12));
+            }
+            else if (Math.Min(x11, x12) == Math.Min(x21, x22))
+            {
+                if (Math.Max(x11, x12) >= Math.Max(x21, x22))
+                    return Interval.Get(x11, x12);
+                else return Interval.Get(Math.Min(x11, x12), Math.Max(x21, x22));
+            }
+            else return Intersect(Interval.Get(x21, x22), Interval.Get(x11, x12));
+        }
+
+
+
+        private PrimitiveValue BinaryOp(PrimitiveValue left, PrimitiveValue right, string op, Location location)
+        {
+            var result = new PrimitiveValue(false);
+            var leftInterval = Interval.Get(left.Intervals.Min(x => x.Low), left.Intervals.Max(x => x.High));
+            var rightInterval = Interval.Get(right.Intervals.Min(x => x.Low), right.Intervals.Max(x => x.High));
+            long[] G = new long[4];
+            bool flag = false;
+            long minG, maxG;
+            bool needToCollect = true;
+            if (op == "+" || op == "+=" || op == "++")
+            {
+                G = Op((x, y) => checked(x + y), (x, y) => x > 0 ? maxValue : minValue, leftInterval, rightInterval, location);
+            }
+            else if (op == "-" || op == "-=" || op == "--")
+            {
+                G = Op((x, y) => checked(x - y), (x, y) => x > 0 ? minValue : maxValue, leftInterval, rightInterval, location);
+            }
+            else if (op == "/" || op == "/=")
+            {
+                //throw new Exception("unsupported division");
+                if (rightInterval.Low <= 0 && 0 <= rightInterval.High)
+                    errorNotifier.AddDevisionByZero(location);
+                G = Op((x, y) => x / y, (x, y) => x > 0 ? minValue : maxValue, leftInterval, rightInterval, location);
+            }
+            else if (op == "*" || op == "*=")
+            {
+                G = Op((x, y) => checked(x * y), (x, y) => x > 0 ? (y > 0? maxValue : minValue): (y > 0 ? minValue : maxValue), leftInterval, rightInterval, location);
+            }
+            else if (op == "||" || op == "|=")
+            {
+                flag = true;
+                G = BoolOp((x, y) => checked(x || y), leftInterval, rightInterval);
+            }
+            else if (op == "&&" || op == "&=")
+            {
+                flag = true;
+                G = BoolOp((x, y) => checked(x && y), leftInterval, rightInterval);
+            }
+            else if (op == "==")
+            {
+                // true if exist intersection
+                // false if all - intersection = empty
+                flag = true;
+                var intersection = Intersect(leftInterval, rightInterval);
+                if (intersection == null)
+                {
+                    for (var qwe = 0; qwe < 4; qwe++)
+                        G[qwe] = 0;
+                }
+                else if (leftInterval.Low == leftInterval.High && rightInterval.Low == rightInterval.High)
+                {
+                    for (var qwe = 0; qwe < 4; qwe++)
+                        G[qwe] = 1;
+                }
+                else
+                {
+                    G[0] = 1;
+                    G[1] = 0;
+                }
+            }
+            else if (op == "!=")
+            {
+                // false if exist intersection
+                // true if all - intersection = empty
+                flag = true;
+                var intersection = Intersect(leftInterval, rightInterval);
+                if (intersection == null)
+                {
+                    for (var qwe = 0; qwe < 4; qwe++)
+                        G[qwe] = 1;
+                }
+                else if (leftInterval.Low == leftInterval.High && rightInterval.Low == rightInterval.High)
+                {
+                    for (var qwe = 0; qwe < 4; qwe++)
+                        G[qwe] = 0;
+                }
+                else
+                {
+                    G[0] = 1;
+                    G[1] = 0;
+                }
+            }
+            else if (op == "<=")
+            {
+                needToCollect = false;
+                var res1 = BinaryOp(left, right, "<", location);
+                var res2 = BinaryOp(left, right, "==", location);
+                result = BinaryOp(res1, res2, "||", location);
+
+            }
+            else if (op == ">=")
+            {
+                needToCollect = false;
+                var res1 = BinaryOp(left, right, ">", location);
+                var res2 = BinaryOp(left, right, "==", location);
+                result = BinaryOp(res1, res2, "||", location);
+            }
+            else if (op == ">")
+            {
+                flag = true;
+                var a = leftInterval.Low;
+                var b = leftInterval.High;
+                var c = rightInterval.Low;
+                var d = rightInterval.High;
+                if (a > c && a > d && b > c && b > d)
+                {
+                    for (var qwe = 0; qwe < 4; qwe++)
+                        G[qwe] = 1;
+                }
+                else if (a < c && a < d && b < c && b < d)
+                {
+                    for (var qwe = 0; qwe < 4; qwe++)
+                        G[qwe] = 0;
+                }
+                else
+                {
+                    G[0] = 1;
+                    G[1] = 0;
+                }
+            }
+            else if (op == "<")
+            {
+                flag = true;
+                var a = leftInterval.Low;
+                var b = leftInterval.High;
+                var c = rightInterval.Low;
+                var d = rightInterval.High;
+                if (a > c && a > d && b > c && b > d)
+                {
+                    for (var qwe = 0; qwe < 4; qwe++)
+                        G[qwe] = 0;
+                }
+                else if (a < c && a < d && b < c && b < d)
+                {
+                    for (var qwe = 0; qwe < 4; qwe++)
+                        G[qwe] = 1;
+                }
+                else
+                {
+                    G[0] = 1;
+                    G[1] = 0;
+                }
+            }
+            else if (op == "is")
+            {
+                needToCollect = false;
+                result.Intervals.Add(Interval.Get(0, 1));
+            }
+            else
+            {
+                needToCollect = false;
+                result.Intervals.Add(Interval.Get(minValue, maxValue));
+                //throw new Exception("unsupported binary operator");
+            }
+
+            if (flag)
+            {
+                if (G.Contains(1) && G.Contains(0))
+                {
+                    result.Intervals.Add(Interval.Get(0, 1));
+                }
+                else if (G.Contains(1))
+                {
+                    result.Intervals.Add(Interval.Get(1, 1));
+                }
+                else
+                {
+                    result.Intervals.Add(Interval.Get(0, 0));
+                }
+            }
+            else if (needToCollect)
+            {
+                minG = G.Min();
+                maxG = G.Max();
+
+                result.Intervals.Add(Interval.Get(Math.Max(minG, minValue), Math.Min(maxG, maxValue)));
+            }
             return result;
         }
 
@@ -306,7 +418,7 @@ namespace MyAnalyser
                 else
                 {
                     var operation = binExpr.OperatorToken;
-                    result = BinaryOp(left, right, operation);
+                    result = BinaryOp(left, right, operation.Text, operation.GetLocation());
                 }
             }
             else if (invocationExpression != null)
@@ -324,12 +436,29 @@ namespace MyAnalyser
                     {
                         value = 0;
                     }
-                    else if (literal.Token.Text.Contains("\""))
+                    else if (literal.Token.Text.Contains("\"")||literal.Token.Text.Contains("'"))
                     {
                         value = 0;
                     }
                     else
-                        value = Int64.Parse(literal.Token.Text);
+                        try
+                        {
+                            value =
+                                Int64.Parse(
+                                    literal.Token.Text.Replace("L", "")
+                                        .Replace("l", "")
+                                        .Replace("U", "")
+                                        .Replace("u", ""));
+                        }
+                        catch
+                        {
+                            value =
+                                Int32.Parse(
+                                    literal.Token.Text.Replace("L", "")
+                                        .Replace("l", "")
+                                        .Replace("U", "")
+                                        .Replace("u", ""));
+                        }
                 }
                 catch (OverflowException e)
                 {
@@ -407,11 +536,20 @@ namespace MyAnalyser
                 {
                     if (x is LiteralExpressionSyntax)
                     {
-                        var value = Int64.Parse((x as LiteralExpressionSyntax).Token.Text);
+                        var value =
+                            Int64.Parse(
+                                (x as LiteralExpressionSyntax).Token.Text.Replace("L", "")
+                                .Replace("l", "")
+                                .Replace("U", "")
+                                .Replace("u", ""));
                         result = new PrimitiveValue(-1 * value, -1 * value);
                     }
                     else
-                        throw new Exception("Unsupported postDecrement expression");
+                    {
+                        var res = Expression(x);
+                        result = BinaryOp(res as PrimitiveValue, new PrimitiveValue(-1, -1), "*", x.GetLocation());
+                    }
+                    //throw new Exception("Unsupported postDecrement expression");
                 }
                 else if (operatorToken.Text == "!")
                 {
@@ -456,7 +594,7 @@ namespace MyAnalyser
                 }
             }*/
             else
-                result = null;
+                result = new PrimitiveValue(minValue, maxValue);
                 //throw new Exception("todo: unsupported expression type");
             return result;
         }
@@ -494,7 +632,7 @@ namespace MyAnalyser
         private Primitive AssignmentOperatorHandler(Primitive oldValue, Primitive newValue, SyntaxToken op)
         {
             if (op.ToString() != "=")
-                return BinaryOp((PrimitiveValue)oldValue, (PrimitiveValue)newValue, op);
+                return BinaryOp((PrimitiveValue)oldValue, (PrimitiveValue)newValue, op.Text, op.GetLocation());
             return newValue;
         }
 
@@ -526,16 +664,20 @@ namespace MyAnalyser
                 else if (assignmentExpr.Left.IsKind(SyntaxKind.ElementAccessExpression))
                 {
                     var elementAccess = (ElementAccessExpressionSyntax)assignmentExpr.Left;
-                    var arrayName = ((IdentifierNameSyntax)elementAccess.Expression).Identifier.Text;
-                    if (vars.Values.ContainsKey(arrayName))
+                    if (elementAccess.Expression is IdentifierNameSyntax)
                     {
-                        exprValue = Expression(assignmentExpr.Right);
-                        if (exprValue != null)
+                        var arrayName = ((IdentifierNameSyntax) elementAccess.Expression).Identifier.Text;
+                        if (vars.Values.ContainsKey(arrayName))
                         {
-                            var args = elementAccess.ArgumentList.Arguments;
-                            var accessedArray = ErrorsCheck(arrayName, args);
-                            var result = AssignmentOperatorHandler(accessedArray.Elements[0], exprValue, operatorToken);
-                            accessedArray.Elements[0] = result;
+                            exprValue = Expression(assignmentExpr.Right);
+                            if (exprValue != null)
+                            {
+                                var args = elementAccess.ArgumentList.Arguments;
+                                var accessedArray = ErrorsCheck(arrayName, args);
+                                var result = AssignmentOperatorHandler(accessedArray.Elements[0], exprValue,
+                                    operatorToken);
+                                accessedArray.Elements[0] = result;
+                            }
                         }
                     }
                 }
@@ -553,9 +695,13 @@ namespace MyAnalyser
                 if (x.IsKind(SyntaxKind.IdentifierName))
                 {
                     var varName = ((IdentifierNameSyntax)x).Identifier.Text;
-                    var result = AssignmentOperatorHandler(vars.Values[varName], one, operatorToken);
-                    vars.Values.Remove(varName);
-                    vars.Values.Add(varName, result);
+                    if (vars.Values.ContainsKey(varName))
+                    {
+
+                        var result = AssignmentOperatorHandler(vars.Values[varName], one, operatorToken);
+                        vars.Values.Remove(varName);
+                        vars.Values.Add(varName, result);
+                    }
                 }
                 else if (x.IsKind(SyntaxKind.ElementAccessExpression))
                 {
@@ -571,7 +717,7 @@ namespace MyAnalyser
             }
             else if (objCreationExpr != null)
             {
-                throw new Exception("todo unsupported objCreation expression");
+                //throw new Exception("todo unsupported objCreation expression");
             }
 
         }
@@ -618,7 +764,7 @@ namespace MyAnalyser
             {
                 var varName = variableDeclarator.Identifier.Text;
                 if (vars.Values.ContainsKey(varName))
-                    throw new Exception("Declaration of already declared variable");
+                    vars.Values.Remove(varName);// new Exception("Declaration of already declared variable");
 
                 Primitive newVar;
                 if (variableDeclarator.Initializer != null)
